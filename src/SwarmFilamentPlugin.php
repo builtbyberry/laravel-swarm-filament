@@ -64,6 +64,18 @@ class SwarmFilamentPlugin implements Plugin
         $panel->pages([
             Pages\ViewSwarmStream::class,
         ]);
+
+        // Read-only observability pages (health dashboard, …). Every Swarm page
+        // extends SwarmPage, which applies the deny-by-default access gate.
+        $panel->pages([
+            Pages\SwarmHealthPage::class,
+        ]);
+
+        // Read-only observability widgets. Every Swarm widget extends SwarmWidget,
+        // which applies the deny-by-default view gate.
+        $panel->widgets([
+            Widgets\SwarmHealthWidget::class,
+        ]);
     }
 
     public function boot(Panel $panel): void
