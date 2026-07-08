@@ -6,7 +6,9 @@ namespace BuiltByBerry\LaravelSwarmFilament\Resources;
 
 use BackedEnum;
 use BuiltByBerry\LaravelSwarmFilament\Models\SwarmRun;
+use BuiltByBerry\LaravelSwarmFilament\Pages\ViewSwarmStream;
 use BuiltByBerry\LaravelSwarmFilament\Resources\SwarmRunResource\Pages;
+use Filament\Actions\Action;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Tables\Columns\TextColumn;
@@ -100,6 +102,10 @@ final class SwarmRunResource extends SwarmResource
             ])
             ->recordActions([
                 ViewAction::make(),
+                Action::make('stream')
+                    ->label('Timeline')
+                    ->icon('heroicon-o-bars-arrow-down')
+                    ->url(static fn (SwarmRun $record): string => ViewSwarmStream::getUrl(['record' => $record->getKey()])),
             ])
             ->recordUrl(static fn (SwarmRun $record): string => Pages\ViewSwarmRun::getUrl(['record' => $record->getKey()]))
             ->defaultSort('created_at', 'desc');
