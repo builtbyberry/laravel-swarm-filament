@@ -7,10 +7,8 @@ namespace BuiltByBerry\LaravelSwarmFilament\Pages;
 use BackedEnum;
 use BuiltByBerry\LaravelSwarm\Contracts\SwarmAuditSink;
 use BuiltByBerry\LaravelSwarmFilament\Support\AuditTracePresenter;
-use BuiltByBerry\LaravelSwarmFilament\Support\SwarmObservabilityGate;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
-use Filament\Pages\Page;
 use Filament\Panel;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -28,9 +26,9 @@ use Filament\Schemas\Schema;
  *
  * The timeline is payload-minimized: it surfaces evidence metadata (category,
  * timestamp, run) only, not the full evidence envelope. Read-only and
- * deny-by-default.
+ * deny-by-default (via {@see SwarmPage}).
  */
-final class AuditTrace extends Page
+final class AuditTrace extends SwarmPage
 {
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-clipboard-document-list';
 
@@ -48,25 +46,6 @@ final class AuditTrace extends Page
      * @var array<string, mixed>|null
      */
     private ?array $data = null;
-
-    public static function canAccess(): bool
-    {
-        return SwarmObservabilityGate::allows();
-    }
-
-    public static function getNavigationGroup(): ?string
-    {
-        $group = config('swarm-filament.navigation.group');
-
-        return is_string($group) ? $group : null;
-    }
-
-    public static function getNavigationSort(): ?int
-    {
-        $sort = config('swarm-filament.navigation.sort');
-
-        return is_int($sort) ? $sort : null;
-    }
 
     public static function getNavigationLabel(): string
     {

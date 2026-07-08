@@ -8,11 +8,9 @@ use BuiltByBerry\LaravelSwarm\Contracts\StreamEventStore;
 use BuiltByBerry\LaravelSwarmFilament\Models\SwarmRun;
 use BuiltByBerry\LaravelSwarmFilament\Resources\SwarmRunResource;
 use BuiltByBerry\LaravelSwarmFilament\Support\StreamTimelinePresenter;
-use BuiltByBerry\LaravelSwarmFilament\Support\SwarmObservabilityGate;
 use Filament\Infolists\Components\CodeEntry;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
-use Filament\Pages\Page;
 use Filament\Panel;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
@@ -31,13 +29,12 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
  * `@internal` cipher. Payloads are rendered defensively (a still-`sw0:` value is
  * masked) even though this substrate is plaintext-but-capture-redacted.
  *
- * Deny-by-default authorization: as a page (whose Filament auth hook differs from
- * a resource's) it calls {@see SwarmObservabilityGate::allows()} in
- * {@see canAccess()} directly, rather than the resource trait. It is not a
- * navigation destination on its own — {@see shouldRegisterNavigation()} is false;
- * it is always reached from a specific run.
+ * Deny-by-default authorization is inherited from {@see SwarmPage} (its
+ * `canAccess()` applies the shared observability gate). It is not a navigation
+ * destination on its own — {@see shouldRegisterNavigation()} is false; it is
+ * always reached from a specific run.
  */
-class ViewSwarmStream extends Page
+class ViewSwarmStream extends SwarmPage
 {
     protected static ?string $slug = 'swarm-streams';
 
@@ -54,11 +51,6 @@ class ViewSwarmStream extends Page
     {
         // Keyed by run id; the run is the entry point, reached from the runs list.
         return '/swarm-streams/{record}';
-    }
-
-    public static function canAccess(): bool
-    {
-        return SwarmObservabilityGate::allows();
     }
 
     public static function shouldRegisterNavigation(): bool

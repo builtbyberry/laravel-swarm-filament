@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace BuiltByBerry\LaravelSwarmFilament\Resources;
 
 use BuiltByBerry\LaravelSwarmFilament\Concerns\AuthorizesSwarmObservability;
+use BuiltByBerry\LaravelSwarmFilament\Concerns\ResolvesSwarmNavigation;
 use Filament\Resources\Resource;
 
 /**
@@ -13,13 +14,15 @@ use Filament\Resources\Resource;
  *
  * Applies the deny-by-default {@see AuthorizesSwarmObservability} gate so every
  * observability resource is authorized uniformly against the configured
- * `viewSwarmObservability` ability — concrete resources extend this rather than
- * wiring the gate individually, so the authorization surface can never drift
- * resource-to-resource.
+ * `viewSwarmObservability` ability, and {@see ResolvesSwarmNavigation} so the
+ * navigation placement is config-driven from one place — concrete resources
+ * extend this rather than wiring either individually, so the authorization and
+ * navigation surfaces can never drift resource-to-resource.
  */
 abstract class SwarmResource extends Resource
 {
     use AuthorizesSwarmObservability;
+    use ResolvesSwarmNavigation;
 
     /**
      * The short label for a run's swarm class — the class basename, so an index
