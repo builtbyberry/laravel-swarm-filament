@@ -6,6 +6,7 @@ namespace BuiltByBerry\LaravelSwarmFilament\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use LogicException;
 
 /**
@@ -30,6 +31,14 @@ use LogicException;
  *    model-instance path the companion actually uses; it is a display view, not
  *    a write-protection layer over the table — a raw query-builder write would
  *    bypass model events, but the companion never issues one.)
+ *
+ * @property-read string $run_id
+ * @property-read string $swarm_class
+ * @property-read string $topology
+ * @property-read string $status
+ * @property-read Carbon|null $created_at
+ * @property-read Carbon|null $finished_at
+ * @property-read Carbon|null $updated_at
  *
  * @internal
  */
