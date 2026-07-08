@@ -77,3 +77,31 @@ test('the resource trait mirrors the gate across every authorization hook', func
         ->and(GateStubResource::canViewAny())->toBeTrue()
         ->and(GateStubResource::canView(new GateStubModel))->toBeTrue();
 });
+
+test('the shipped config default is the non-empty viewSwarmObservability ability', function () {
+    // Deny-by-default for a fresh install rests entirely on the packaged default
+    // being a non-empty string — every other test config()->set()s it, so lock
+    // the un-overridden default here.
+    expect(config('swarm-filament.authorization.ability'))->toBe('viewSwarmObservability');
+});
+
+test('the resource trait denies an unauthenticated user even with a permissive gate', function () {
+    // The no-user denial must hold through the trait hooks Filament actually calls,
+    // not just the raw helper.
+    config()->set('swarm-filament.authorization.ability', 'viewSwarmObservability');
+    Gate::define('viewSwarmObservability', fn (): bool => true);
+
+    expect(GateStubResource::canAccess())->toBeFalse()
+        ->and(GateStubResource::canViewAny())->toBeFalse()
+        ->and(GateStubResource::canView(new GateStubModel))->toBeFalse();
+});
+
+test('the defer branch short-circuits before consulting the gate', function () {
+    // With ability=null, a DENYING gate must be irrelevant — proving allows()
+    // returns before ever calling Gate::allows().
+    $this->actingAs(new GateStubUser);
+    config()->set('swarm-filament.authorization.ability', null);
+    Gate::define('viewSwarmObservability', fn (): bool => false);
+
+    expect(SwarmObservabilityGate::allows())->toBeTrue();
+});
