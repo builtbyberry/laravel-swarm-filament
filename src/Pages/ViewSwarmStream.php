@@ -11,6 +11,7 @@ use BuiltByBerry\LaravelSwarmFilament\Support\StreamTimelinePresenter;
 use Filament\Infolists\Components\CodeEntry;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Infolists\Components\ViewEntry;
 use Filament\Panel;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
@@ -124,6 +125,16 @@ class ViewSwarmStream extends SwarmPage
 
             return $schema->components($components);
         }
+
+        // Swimlane overview: one lane per node, events left-to-right in causal
+        // order, void-edge markers highlighted. The per-node sections below are the
+        // drill-down (full payloads).
+        $components[] = Section::make('Timeline')->schema([
+            ViewEntry::make('timeline')
+                ->hiddenLabel()
+                ->view('swarm-filament::timeline')
+                ->state($timeline),
+        ]);
 
         foreach ($nodes as $index => $node) {
             if (is_array($node)) {

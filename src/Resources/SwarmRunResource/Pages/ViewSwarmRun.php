@@ -8,9 +8,12 @@ use BuiltByBerry\LaravelSwarm\Contracts\ReadableRunHistoryStore;
 use BuiltByBerry\LaravelSwarmFilament\Models\SwarmRun;
 use BuiltByBerry\LaravelSwarmFilament\Resources\SwarmRunResource;
 use BuiltByBerry\LaravelSwarmFilament\Support\RunDisplayPresenter;
+use BuiltByBerry\LaravelSwarmFilament\Support\RunGraph;
+use BuiltByBerry\LaravelSwarmFilament\Support\WorkflowGraphPresenter;
 use Filament\Actions\Action;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Infolists\Components\ViewEntry;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -73,7 +76,16 @@ final class ViewSwarmRun extends ViewRecord
     {
         $data = $this->presented();
 
+        $graph = RunGraph::fromRun($data);
+
         return $schema->components([
+            Section::make('Workflow')
+                ->schema([
+                    ViewEntry::make('workflow')
+                        ->hiddenLabel()
+                        ->view('swarm-filament::graph')
+                        ->state(WorkflowGraphPresenter::present($graph['nodes'], $graph['edges'])),
+                ]),
             Section::make('Run')
                 ->columns(2)
                 ->schema([

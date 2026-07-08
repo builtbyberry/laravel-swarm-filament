@@ -8,10 +8,13 @@ use BuiltByBerry\LaravelSwarm\Contracts\InspectsDurableRuns;
 use BuiltByBerry\LaravelSwarmFilament\Models\SwarmDurableRun;
 use BuiltByBerry\LaravelSwarmFilament\Resources\SwarmDurableRunResource;
 use BuiltByBerry\LaravelSwarmFilament\Support\DurableRunPresenter;
+use BuiltByBerry\LaravelSwarmFilament\Support\RunGraph;
+use BuiltByBerry\LaravelSwarmFilament\Support\WorkflowGraphPresenter;
 use Filament\Actions\Action;
 use Filament\Infolists\Components\KeyValueEntry;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Infolists\Components\ViewEntry;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -80,7 +83,16 @@ final class ViewSwarmDurableRun extends ViewRecord
         /** @var array<string, string> $summary */
         $summary = $data['summary'];
 
+        $graph = RunGraph::fromDurable($data);
+
         $components = [
+            Section::make('Workflow')
+                ->schema([
+                    ViewEntry::make('workflow')
+                        ->hiddenLabel()
+                        ->view('swarm-filament::graph')
+                        ->state(WorkflowGraphPresenter::present($graph['nodes'], $graph['edges'])),
+                ]),
             Section::make('Durable run')
                 ->columns(2)
                 ->schema([
