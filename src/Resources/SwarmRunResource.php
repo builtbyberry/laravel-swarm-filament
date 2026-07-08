@@ -36,20 +36,6 @@ final class SwarmRunResource extends SwarmResource
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-rectangle-stack';
 
-    public static function getNavigationGroup(): ?string
-    {
-        $group = config('swarm-filament.navigation.group');
-
-        return is_string($group) ? $group : null;
-    }
-
-    public static function getNavigationSort(): ?int
-    {
-        $sort = config('swarm-filament.navigation.sort');
-
-        return is_int($sort) ? $sort : null;
-    }
-
     public static function getModelLabel(): string
     {
         return 'Swarm run';
@@ -120,16 +106,6 @@ final class SwarmRunResource extends SwarmResource
             'index' => Pages\ListSwarmRuns::route('/'),
             'view' => Pages\ViewSwarmRun::route('/{record}'),
         ];
-    }
-
-    /**
-     * The short label for a run's swarm class — the class basename, so the index
-     * column shows `Example` not `App\Swarms\Example` (the full FQCN stays as the
-     * cell tooltip). Extracted so the transform is testable.
-     */
-    public static function swarmLabel(?string $swarmClass): string
-    {
-        return $swarmClass === null ? '' : class_basename($swarmClass);
     }
 
     /**

@@ -7,10 +7,8 @@ namespace BuiltByBerry\LaravelSwarmFilament\Pages;
 use BackedEnum;
 use BuiltByBerry\LaravelSwarm\Contracts\ReadableAuditOutbox;
 use BuiltByBerry\LaravelSwarmFilament\Support\OutboxHealthPresenter;
-use BuiltByBerry\LaravelSwarmFilament\Support\SwarmObservabilityGate;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
-use Filament\Pages\Page;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
@@ -31,10 +29,11 @@ use Filament\Schemas\Schema;
  * table is missing) the contract reports an empty, unavailable outbox and this
  * page renders a clean empty-state rather than erroring.
  *
- * Read-only and deny-by-default: {@see canAccess()} gates on the same
- * `viewSwarmObservability` ability as every other observability surface.
+ * Read-only and deny-by-default: it extends {@see SwarmPage}, which gates access
+ * on the same `viewSwarmObservability` ability as every other observability
+ * surface and resolves the shared navigation placement.
  */
-final class AuditOutboxHealth extends Page
+final class AuditOutboxHealth extends SwarmPage
 {
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-inbox-stack';
 
@@ -51,25 +50,6 @@ final class AuditOutboxHealth extends Page
      * @var array<string, mixed>|null
      */
     private ?array $data = null;
-
-    public static function canAccess(): bool
-    {
-        return SwarmObservabilityGate::allows();
-    }
-
-    public static function getNavigationGroup(): ?string
-    {
-        $group = config('swarm-filament.navigation.group');
-
-        return is_string($group) ? $group : null;
-    }
-
-    public static function getNavigationSort(): ?int
-    {
-        $sort = config('swarm-filament.navigation.sort');
-
-        return is_int($sort) ? $sort : null;
-    }
 
     public static function getNavigationLabel(): string
     {

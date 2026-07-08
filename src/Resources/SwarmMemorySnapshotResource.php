@@ -42,20 +42,6 @@ final class SwarmMemorySnapshotResource extends SwarmResource
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-cpu-chip';
 
-    public static function getNavigationGroup(): ?string
-    {
-        $group = config('swarm-filament.navigation.group');
-
-        return is_string($group) ? $group : null;
-    }
-
-    public static function getNavigationSort(): ?int
-    {
-        $sort = config('swarm-filament.navigation.sort');
-
-        return is_int($sort) ? $sort : null;
-    }
-
     public static function getModelLabel(): string
     {
         return 'Memory snapshot';

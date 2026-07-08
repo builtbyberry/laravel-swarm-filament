@@ -5,13 +5,15 @@ declare(strict_types=1);
 namespace BuiltByBerry\LaravelSwarmFilament\Pages;
 
 use BuiltByBerry\LaravelSwarmFilament\Concerns\AuthorizesSwarmObservability;
+use BuiltByBerry\LaravelSwarmFilament\Concerns\ResolvesSwarmNavigation;
 use BuiltByBerry\LaravelSwarmFilament\Resources\SwarmResource;
 use BuiltByBerry\LaravelSwarmFilament\Support\SwarmObservabilityGate;
 use Filament\Pages\Concerns\CanAuthorizeAccess;
 use Filament\Pages\Page;
 
 /**
- * Base class for the read-only observability **Pages** (health dashboard, …).
+ * Base class for the read-only observability **Pages** (health dashboard, audit
+ * surfaces, streaming viewer).
  *
  * The parallel of {@see SwarmResource}
  * for standalone pages. A Filament {@see Page} authorizes through
@@ -20,26 +22,15 @@ use Filament\Pages\Page;
  * Resource's {@see AuthorizesSwarmObservability}
  * trait. The deny-by-default {@see SwarmObservabilityGate} decision is applied here
  * once so every Swarm page inherits it and the page authorization surface can never
- * drift page-to-page (change-review finding #3-F5).
+ * drift page-to-page (change-review finding #3-F5). Navigation placement comes from
+ * the shared {@see ResolvesSwarmNavigation} concern, the same home the resources use.
  */
 abstract class SwarmPage extends Page
 {
+    use ResolvesSwarmNavigation;
+
     public static function canAccess(): bool
     {
         return SwarmObservabilityGate::allows();
-    }
-
-    public static function getNavigationGroup(): ?string
-    {
-        $group = config('swarm-filament.navigation.group');
-
-        return is_string($group) ? $group : null;
-    }
-
-    public static function getNavigationSort(): ?int
-    {
-        $sort = config('swarm-filament.navigation.sort');
-
-        return is_int($sort) ? $sort : null;
     }
 }

@@ -6,9 +6,7 @@ namespace BuiltByBerry\LaravelSwarmFilament\Pages;
 
 use BuiltByBerry\LaravelSwarm\Contracts\ReadableAuditOutbox;
 use BuiltByBerry\LaravelSwarmFilament\Support\OutboxHealthPresenter;
-use BuiltByBerry\LaravelSwarmFilament\Support\SwarmObservabilityGate;
 use Filament\Infolists\Components\TextEntry;
-use Filament\Pages\Page;
 use Filament\Panel;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -25,10 +23,10 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
  * — the degrade lives in {@see OutboxHealthPresenter::presentRecord()}.
  *
  * An unknown outbox id resolves to a 404 (via {@see ModelNotFoundException}), never
- * a 500. Read-only and deny-by-default; hidden from navigation (it is a detail view
- * reached from the outbox health page).
+ * a 500. Read-only and deny-by-default (via {@see SwarmPage}); hidden from
+ * navigation (it is a detail view reached from the outbox health page).
  */
-final class AuditOutboxRecord extends Page
+final class AuditOutboxRecord extends SwarmPage
 {
     // A slug distinct from AuditOutboxHealth's: Filament derives the route NAME
     // from the slug (filament.{panel}.pages.{slug}), so a shared slug would collide
@@ -49,11 +47,6 @@ final class AuditOutboxRecord extends Page
      * @var array<string, mixed>|null
      */
     private ?array $data = null;
-
-    public static function canAccess(): bool
-    {
-        return SwarmObservabilityGate::allows();
-    }
 
     public static function shouldRegisterNavigation(): bool
     {
