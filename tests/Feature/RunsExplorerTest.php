@@ -6,12 +6,33 @@ use BuiltByBerry\LaravelSwarm\Contracts\ReadableRunHistoryStore;
 use BuiltByBerry\LaravelSwarm\Persistence\SwarmPersistenceCipher;
 use BuiltByBerry\LaravelSwarmFilament\Models\SwarmRun;
 use BuiltByBerry\LaravelSwarmFilament\Resources\SwarmRunResource;
+use BuiltByBerry\LaravelSwarmFilament\Resources\SwarmRunResource\Pages\ViewSwarmRun;
 use BuiltByBerry\LaravelSwarmFilament\Support\RunDisplayPresenter;
 use Illuminate\Config\Repository;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Encryption\Encrypter;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Psr\Log\NullLogger;
+
+/** An in-memory ReadableRunHistoryStore whose findForDisplay() is scripted. */
+function runsExplorerStore(?array $display): ReadableRunHistoryStore
+{
+    return new class($display) implements ReadableRunHistoryStore
+    {
+        public function __construct(private ?array $display) {}
+
+        public function findForDisplay(string $runId): ?array
+        {
+            return $this->display;
+        }
+
+        public function query(?string $swarmClass = null, ?string $status = null, int $limit = 25): array
+        {
+            return [];
+        }
+    };
+}
 
 /*
  * Component #4 — the runs explorer (index + run/step detail). The index binds the
@@ -120,6 +141,23 @@ test('the resource navigation group is driven by config', function () {
     expect(SwarmRunResource::getNavigationGroup())->toBe('Observability');
 });
 
+test('the resource navigation sort is driven by config, defaulting to null', function () {
+    expect(SwarmRunResource::getNavigationSort())->toBeNull();
+
+    config()->set('swarm-filament.navigation.sort', 3);
+    expect(SwarmRunResource::getNavigationSort())->toBe(3);
+
+    // A non-int config value falls back to null rather than mis-typing the sort.
+    config()->set('swarm-filament.navigation.sort', 'oops');
+    expect(SwarmRunResource::getNavigationSort())->toBeNull();
+});
+
+test('the swarm label shows the class basename, empty for a null class', function () {
+    expect(SwarmRunResource::swarmLabel('App\\Swarms\\Example'))->toBe('Example')
+        ->and(SwarmRunResource::swarmLabel('Flat'))->toBe('Flat')
+        ->and(SwarmRunResource::swarmLabel(null))->toBe('');
+});
+
 test('the shared status color maps every run status to a Filament token', function () {
     expect(SwarmRunResource::statusColor('completed'))->toBe('success')
         ->and(SwarmRunResource::statusColor('failed'))->toBe('danger')
@@ -172,6 +210,13 @@ test('a run detail sourced through findForDisplay degrades poison fields and kee
     $presented = RunDisplayPresenter::present($detail);
 
     expect($presented['status'])->toBe('completed')
+        // Summary + timestamp keys must survive the contract→presenter mapping,
+        // or a key-name drift renders the detail header blank with a green suite.
+        ->and($presented['run_id'])->toBe($runId)
+        ->and($presented['swarm_class'])->toBe('App\\Swarms\\Example')
+        ->and($presented['topology'])->toBe('sequential')
+        ->and($presented['started_at'])->not->toBeNull()
+        ->and($presented['finished_at'])->not->toBeNull()
         // Poison context input degrades; clean run output survives.
         ->and($presented['context'])->toBe('unavailable')
         ->and($presented['output'])->toBe('clean run output')
@@ -182,4 +227,27 @@ test('a run detail sourced through findForDisplay degrades poison fields and kee
 
     // No sw0: ciphertext survives anywhere in the presented record.
     expect(json_encode($presented))->not->toContain('sw0:');
+});
+
+// ---------------------------------------------------------------------------
+// ViewSwarmRun::resolveDisplay — the null→404 guard, testable below the render.
+// ---------------------------------------------------------------------------
+
+test('the detail resolve throws not-found when the display record is gone', function () {
+    // A plaintext index row can exist while its sealed display record has been
+    // purged/expired — that must 404, not render an empty shell.
+    ViewSwarmRun::resolveDisplay(runsExplorerStore(null), 'vanished-run');
+})->throws(ModelNotFoundException::class);
+
+test('the detail resolve maps the display record through the presenter when present', function () {
+    $presented = ViewSwarmRun::resolveDisplay(runsExplorerStore([
+        'run_id' => 'r9', 'swarm_class' => 'App\\Swarms\\Example', 'topology' => 'sequential', 'status' => 'completed',
+        'context' => ['input' => 'the prompt'], 'context_available' => true,
+        'output' => 'the answer', 'output_available' => true,
+        'steps' => [],
+    ]), 'r9');
+
+    expect($presented['run_id'])->toBe('r9')
+        ->and($presented['context'])->toBe('the prompt')
+        ->and($presented['output'])->toBe('the answer');
 });

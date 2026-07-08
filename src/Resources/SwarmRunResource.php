@@ -70,7 +70,7 @@ final class SwarmRunResource extends SwarmResource
                     ->fontFamily('mono'),
                 TextColumn::make('swarm_class')
                     ->label('Swarm')
-                    ->formatStateUsing(static fn (?string $state): string => $state === null ? '' : class_basename($state))
+                    ->formatStateUsing(static fn (?string $state): string => self::swarmLabel($state))
                     ->tooltip(static fn (SwarmRun $record): string => $record->swarm_class)
                     ->searchable()
                     ->sortable(),
@@ -114,6 +114,16 @@ final class SwarmRunResource extends SwarmResource
             'index' => Pages\ListSwarmRuns::route('/'),
             'view' => Pages\ViewSwarmRun::route('/{record}'),
         ];
+    }
+
+    /**
+     * The short label for a run's swarm class — the class basename, so the index
+     * column shows `Example` not `App\Swarms\Example` (the full FQCN stays as the
+     * cell tooltip). Extracted so the transform is testable.
+     */
+    public static function swarmLabel(?string $swarmClass): string
+    {
+        return $swarmClass === null ? '' : class_basename($swarmClass);
     }
 
     /**

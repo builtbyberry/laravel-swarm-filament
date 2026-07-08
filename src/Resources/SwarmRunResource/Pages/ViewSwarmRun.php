@@ -42,20 +42,31 @@ final class ViewSwarmRun extends ViewRecord
      */
     private function presented(): array
     {
-        if ($this->presented !== null) {
-            return $this->presented;
-        }
+        return $this->presented ??= self::resolveDisplay(
+            app(ReadableRunHistoryStore::class),
+            (string) $this->getRecord()->getKey(),
+        );
+    }
 
-        $runId = (string) $this->getRecord()->getKey();
-        $display = app(ReadableRunHistoryStore::class)->findForDisplay($runId);
+    /**
+     * Resolve a run's display record through the contract and map it — or throw
+     * {@see ModelNotFoundException} when the display record is gone, so a
+     * purged/expired sealed row 404s rather than rendering an empty shell.
+     *
+     * Extracted as a static so the null-guard is testable directly, below the
+     * Livewire render layer.
+     *
+     * @return array<string, mixed>
+     */
+    public static function resolveDisplay(ReadableRunHistoryStore $store, string $runId): array
+    {
+        $display = $store->findForDisplay($runId);
 
-        // The plaintext row resolved (or we would not be here), but its display
-        // record is gone — treat as not found rather than render an empty shell.
         if ($display === null) {
             throw (new ModelNotFoundException)->setModel(SwarmRun::class, [$runId]);
         }
 
-        return $this->presented = RunDisplayPresenter::present($display);
+        return RunDisplayPresenter::present($display);
     }
 
     public function infolist(Schema $schema): Schema

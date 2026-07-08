@@ -96,9 +96,8 @@ final class RunDisplayPresenter
     }
 
     /**
-     * Render one sealed field through {@see DisplayField}, mapping its three
-     * outcomes to display strings. Ciphertext never escapes: a still-`sw0:` value
-     * is flagged unavailable by DisplayField and rendered as such.
+     * Render a flat `<field>` / `<field>_available` sealed pair; the three-state
+     * mapping (and the ciphertext-escape guarantee) lives in {@see render()}.
      *
      * @param  array<string, mixed>  $row
      */
