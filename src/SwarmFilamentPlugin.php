@@ -76,6 +76,14 @@ class SwarmFilamentPlugin implements Plugin
         $panel->widgets([
             Widgets\SwarmHealthWidget::class,
         ]);
+
+        // Read-only audit surfaces: outbox health (a non-consuming index + a
+        // payload-minimized single-row detail) and the per-run audit trace.
+        $panel->pages([
+            Pages\AuditOutboxHealth::class,
+            Pages\AuditOutboxRecord::class,
+            Pages\AuditTrace::class,
+        ]);
     }
 
     public function boot(Panel $panel): void
