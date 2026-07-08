@@ -55,6 +55,13 @@ class SwarmFilamentPlugin implements Plugin
         $panel->resources([
             Resources\SwarmRunResource::class,
         ]);
+
+        // The streaming / causal-log viewer is a per-run standalone page (keyed by
+        // run id, reached from the runs explorer), so it is registered as a page,
+        // not a resource. It gates itself deny-by-default in canAccess().
+        $panel->pages([
+            Pages\ViewSwarmStream::class,
+        ]);
     }
 
     public function boot(Panel $panel): void
