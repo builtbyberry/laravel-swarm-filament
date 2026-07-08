@@ -20,11 +20,13 @@ use Filament\Panel;
  * }
  * ```
  *
- * Access to these surfaces is authorization-agnostic at the package level, in
- * keeping with the core read contracts — gate visibility in the host app
- * (a Filament access policy / `canAccessPanel`, or a resource authorization
- * gate). The surfaces are strictly view-only; operator control verbs
- * (pause/resume/cancel/signal) live in the separate paid operator console.
+ * Access is deny-by-default: every surface authorizes against the configured
+ * `config('swarm-filament.authorization.ability')` Gate (default
+ * `viewSwarmObservability`) before rendering, so absent a Gate definition in the
+ * host app the surfaces stay hidden. Set that ability to `null` to defer entirely
+ * to Filament's own panel / resource authorization instead. The surfaces are
+ * strictly view-only; operator control verbs (pause/resume/cancel/signal) live in
+ * the separate paid operator console.
  */
 class SwarmFilamentPlugin implements Plugin
 {
@@ -51,7 +53,7 @@ class SwarmFilamentPlugin implements Plugin
         // Read-only observability resources are registered here as they land:
         // runs, steps, durable state, memory, streaming, and audit health.
         $panel->resources([
-            // Resources\SwarmRunResource::class,
+            Resources\SwarmRunResource::class,
         ]);
     }
 
