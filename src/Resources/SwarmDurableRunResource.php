@@ -130,16 +130,6 @@ final class SwarmDurableRunResource extends SwarmResource
     }
 
     /**
-     * The short label for a run's swarm class — the class basename, so the index
-     * column shows `Example` not `App\Swarms\Example` (the full FQCN stays as the
-     * cell tooltip). Extracted so the transform is testable.
-     */
-    public static function swarmLabel(?string $swarmClass): string
-    {
-        return $swarmClass === null ? '' : class_basename($swarmClass);
-    }
-
-    /**
      * A Filament color token for a durable-run status. Shared by the index badge
      * and the detail-view status entry so the two never diverge.
      */

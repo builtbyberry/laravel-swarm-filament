@@ -125,6 +125,7 @@ final class ViewSwarmDurableRun extends ViewRecord
                             TextEntry::make('status')->badge(),
                             TextEntry::make('input'),
                             TextEntry::make('output'),
+                            TextEntry::make('failure'),
                             TextEntry::make('attempts'),
                             TextEntry::make('finished_at')->label('Finished'),
                         ]),
@@ -142,6 +143,7 @@ final class ViewSwarmDurableRun extends ViewRecord
                             TextEntry::make('status')->badge(),
                             TextEntry::make('context')->label('Context'),
                             TextEntry::make('output'),
+                            TextEntry::make('failure'),
                         ]),
                 ]),
             Section::make('Node outputs')

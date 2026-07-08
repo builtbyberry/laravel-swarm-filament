@@ -374,6 +374,79 @@ test('the durable resource is registered on the plugin panel', function () {
 });
 
 // ---------------------------------------------------------------------------
+// SwarmDurableRun — the read-only model discipline (whitelist + write guards).
+// ---------------------------------------------------------------------------
+
+/** Seed a durable run row with the operational columns populated. */
+function durableModelSeed(string $runId, string $status = 'completed'): void
+{
+    config()->set('swarm.persistence.driver', 'database');
+    Artisan::call('migrate', ['--database' => 'testing']);
+
+    durableInspectorSeedRun($runId, $status);
+
+    // Populate the operational columns the whitelist must never select.
+    DB::table('swarm_durable_runs')->where('run_id', $runId)->update([
+        'execution_token' => 'operational-token',
+        'leased_until' => now('UTC')->addMinutes(5),
+    ]);
+}
+
+test('SwarmDurableRun selects only plaintext columns and never loads sealed or operational ones', function () {
+    durableModelSeed('durable-1');
+
+    $run = SwarmDurableRun::query()->first();
+
+    expect($run)->not->toBeNull()
+        ->and($run->run_id)->toBe('durable-1')
+        ->and($run->swarm_class)->toBe('App\\Swarms\\Example')
+        ->and($run->status)->toBe('completed');
+
+    // The operational columns are never selected → never in the attribute bag →
+    // a live lease token can never leak into a table cell.
+    $attributes = $run->getAttributes();
+    expect($attributes)->not->toHaveKey('execution_token')
+        ->and($attributes)->not->toHaveKey('leased_until')
+        ->and($attributes)->not->toHaveKey('next_step_index')
+        ->and($attributes)->not->toHaveKey('timeout_at');
+});
+
+test('SwarmDurableRun filters and sorts natively on plaintext columns', function () {
+    durableModelSeed('durable-done', 'completed');
+    durableModelSeed('durable-failed', 'failed');
+
+    expect(SwarmDurableRun::query()->where('status', 'failed')->pluck('run_id')->all())->toBe(['durable-failed'])
+        ->and(SwarmDurableRun::query()->orderBy('run_id')->pluck('run_id')->all())->toBe(['durable-done', 'durable-failed']);
+});
+
+test('SwarmDurableRun is read-only — writes and deletes fail loud', function () {
+    durableModelSeed('durable-1');
+
+    $new = new SwarmDurableRun;
+    $new->setAttribute('run_id', 'x');
+    $new->setAttribute('status', 'completed');
+    expect(fn () => $new->save())->toThrow(LogicException::class, 'read-only');
+
+    $existing = SwarmDurableRun::query()->first();
+    expect(fn () => $existing->delete())->toThrow(LogicException::class, 'read-only');
+
+    // Nothing was written.
+    expect(DB::table('swarm_durable_runs')->count())->toBe(1);
+});
+
+test('SwarmDurableRun resolves a bound operational attribute to null via the accessor path, never a live token', function () {
+    durableModelSeed('durable-1');
+
+    $run = SwarmDurableRun::query()->first();
+
+    // The path a Filament TextColumn::make('execution_token') renders through is
+    // the magic accessor $run->execution_token — the scope makes it null, never
+    // the live lease token.
+    expect($run->execution_token)->toBeNull()
+        ->and($run->leased_until)->toBeNull();
+});
+
+// ---------------------------------------------------------------------------
 // ViewSwarmDurableRun::resolveDisplay — the null→404 guard, below the render.
 // ---------------------------------------------------------------------------
 
@@ -447,11 +520,55 @@ test('a durable detail sourced through the real contract degrades poison seams a
         ],
     ]);
 
+    // Child runs through the real store: a clean one (app-key sealed context +
+    // output), a poison one (foreign-key sealed), and one whose context input is
+    // absent-but-available — the three child sealed states end to end.
+    $store->createChildRun($runId, 'child-clean', 'App\\Swarms\\Child', 'spawn', ['input' => 'clean child input']);
+    $store->updateChildRun('child-clean', 'completed', output: 'clean child output');
+    DB::table('swarm_durable_child_runs')->insert([
+        [
+            'parent_run_id' => $runId, 'child_run_id' => 'child-poison', 'child_swarm_class' => 'App\\Swarms\\Child',
+            'wait_name' => 'spawn', 'context_payload' => json_encode(['input' => durableInspectorPoison('poison child ctx')]),
+            'status' => 'failed', 'output' => durableInspectorPoison('poison child output'),
+            'failure' => json_encode(['message' => 'child boom', 'class' => 'RuntimeException']),
+            'dispatched_at' => $now, 'terminal_event_dispatched_at' => null, 'created_at' => $now, 'updated_at' => $now,
+        ],
+        [
+            'parent_run_id' => $runId, 'child_run_id' => 'child-none', 'child_swarm_class' => 'App\\Swarms\\Child',
+            'wait_name' => 'spawn', 'context_payload' => json_encode([]),
+            'status' => 'pending', 'output' => null, 'failure' => null,
+            'dispatched_at' => null, 'terminal_event_dispatched_at' => null, 'created_at' => $now, 'updated_at' => $now,
+        ],
+    ]);
+
+    // A recorded progress row through the real store.
+    $store->recordProgress($runId, null, ['pct' => 75]);
+
     // Plaintext side-table data: labels, a detail carrying a stray sw0: string, a wait, a signal.
     $store->updateLabels($runId, ['env' => 'prod', 'attempt' => 2]);
     $store->updateDetails($runId, ['note' => 'kept', 'leaky' => 'sw0:should-be-masked']);
     $store->createWait($runId, 'human-approval', 'needs sign-off', 3600);
     $store->recordSignal($runId, 'approved', ['by' => 'alice']);
+
+    // A released wait whose outcome map carries a stray sealed value nested inside
+    // it — proves the shared recursive sanitize on another json() site (outcome).
+    DB::table('swarm_durable_waits')->insert([
+        'run_id' => $runId, 'name' => 'released-wait', 'status' => 'signalled', 'reason' => null,
+        'timeout_at' => null, 'signal_id' => null,
+        'outcome' => json_encode(['status' => 'signalled', 'token' => 'sw0:nested-outcome']),
+        'metadata' => json_encode([]), 'finished_at' => $now, 'created_at' => $now, 'updated_at' => $now,
+    ]);
+
+    // A run-history record through the real store's table: poison context, clean
+    // output — proves the history sub-shape resolves through the real inspector.
+    DB::table('swarm_run_histories')->insert([
+        'run_id' => $runId, 'swarm_class' => 'App\\Swarms\\Example', 'topology' => 'hierarchical',
+        'status' => 'completed', 'context' => json_encode(['input' => durableInspectorPoison('history ctx')]),
+        'metadata' => json_encode([]), 'steps' => json_encode([]), 'output' => $cipher->seal('clean history output'),
+        'usage' => json_encode([]), 'error' => null, 'artifacts' => json_encode([]),
+        'finished_at' => $now, 'expires_at' => $now->copy()->addHour(), 'execution_token' => null,
+        'leased_until' => null, 'created_at' => $now, 'updated_at' => $now,
+    ]);
 
     $presented = ViewSwarmDurableRun::resolveDisplay(app(InspectsDurableRuns::class), $runId);
 
@@ -478,9 +595,36 @@ test('a durable detail sourced through the real contract degrades poison seams a
         ->and($presented['details']['note'])->toBe('kept')
         ->and($presented['details']['leaky'])->toBe('unavailable');
 
-    // Waits + signals surfaced.
-    expect(collect($presented['waits'])->pluck('name'))->toContain('human-approval')
+    // Child runs: clean context/output survive, poison degrades, absent context
+    // input renders `none` — the three child sealed states through the real store.
+    $children = collect($presented['children'])->keyBy('child_run_id');
+    expect($children['child-clean']['context'])->toBe('clean child input')
+        ->and($children['child-clean']['output'])->toBe('clean child output')
+        ->and($children['child-poison']['context'])->toBe('unavailable')
+        ->and($children['child-poison']['output'])->toBe('unavailable')
+        // The poison child's plaintext failure map still surfaces (not sealed).
+        ->and($children['child-poison']['failure'])->toContain('child boom')
+        ->and($children['child-none']['context'])->toBe('none')
+        ->and($children['child-none']['output'])->toBe('none');
+
+    // Progress row surfaced through the real store, keys intact.
+    expect($presented['progress'])->toHaveCount(1)
+        ->and($presented['progress'][0]['progress'])->toBe('{"pct":75}');
+
+    // Waits + signals surfaced; the released wait's nested sealed outcome value is
+    // masked by the shared recursive sanitize (proves it on a second json() site).
+    $waits = collect($presented['waits'])->keyBy('name');
+    expect($waits)->toHaveKeys(['human-approval', 'released-wait'])
+        ->and($waits['released-wait']['outcome'])->toContain('signalled')
+        ->and($waits['released-wait']['outcome'])->not->toContain('sw0:')
+        ->and($waits['released-wait']['outcome'])->toContain('unavailable')
         ->and(collect($presented['signals'])->pluck('name'))->toContain('approved');
+
+    // Run history sub-shape resolves through the real inspector: poison context
+    // degrades, clean output survives.
+    expect($presented['history'])->not->toBeNull()
+        ->and($presented['history']['context'])->toBe('unavailable')
+        ->and($presented['history']['output'])->toBe('clean history output');
 
     // The leak invariant, end to end: no sw0: ciphertext survives anywhere.
     expect(json_encode($presented))->not->toContain('sw0:');

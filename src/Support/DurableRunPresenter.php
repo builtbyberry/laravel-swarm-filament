@@ -6,6 +6,7 @@ namespace BuiltByBerry\LaravelSwarmFilament\Support;
 
 use BuiltByBerry\LaravelSwarm\Contracts\InspectsDurableRuns;
 use BuiltByBerry\LaravelSwarm\Responses\DurableRunDetail;
+use BuiltByBerry\LaravelSwarmFilament\Resources\SwarmDurableRunResource\Pages\ViewSwarmDurableRun;
 use Filament\Infolists\Components\KeyValueEntry;
 
 /**
@@ -33,6 +34,13 @@ use Filament\Infolists\Components\KeyValueEntry;
  *
  * Pure and container-free: it takes the assembled DTO and never touches the
  * cipher, the store, or Filament — so it is unit-testable directly.
+ *
+ * Each list row is presented as the FULL row shape (e.g. a branch also carries
+ * `duration_ms` / `started_at`, a child `dispatched_at`, a node `expires_at`, a
+ * signal `idempotency_key`); the {@see ViewSwarmDurableRun}
+ * infolist renders a curated subset of those keys. This is deliberate — the
+ * presenter is the leak-safe projection of the whole detail, the view chooses
+ * what to surface — so an extra key here is not dead output.
  */
 final class DurableRunPresenter
 {
@@ -174,11 +182,17 @@ final class DurableRunPresenter
             'child_swarm_class' => self::value($c['child_swarm_class'] ?? null),
             'wait_name' => self::value($c['wait_name'] ?? null),
             'status' => self::value($c['status'] ?? null),
-            // The child context arrives flat as `context_payload` + `context_available`.
+            // The child context arrives as the decrypted context ROW under
+            // `context_payload` (an array `['input' => <decrypted|null>, ...]`)
+            // paired with a top-level `context_available` flag — mirroring the
+            // run-history context shape. Pull `input` (never the whole row) and
+            // route it through DisplayField for the same sw0:/degrade treatment.
             'context' => self::sealed([
-                'context' => $c['context_payload'] ?? null,
-                'context_available' => $c['context_available'] ?? true,
-            ], 'context'),
+                'input' => is_array($c['context_payload'] ?? null)
+                    ? ($c['context_payload']['input'] ?? null)
+                    : ($c['context_payload'] ?? null),
+                'input_available' => $c['context_available'] ?? true,
+            ], 'input'),
             'output' => self::sealed($c, 'output'),
             'failure' => self::json($c['failure'] ?? null),
             'dispatched_at' => self::value($c['dispatched_at'] ?? null),
