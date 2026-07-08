@@ -54,6 +54,7 @@ class SwarmFilamentPlugin implements Plugin
         // runs, steps, durable state, memory, streaming, and audit health.
         $panel->resources([
             Resources\SwarmRunResource::class,
+            Resources\SwarmDurableRunResource::class,
         ]);
     }
 

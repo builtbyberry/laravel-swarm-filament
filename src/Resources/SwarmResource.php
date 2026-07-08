@@ -20,4 +20,15 @@ use Filament\Resources\Resource;
 abstract class SwarmResource extends Resource
 {
     use AuthorizesSwarmObservability;
+
+    /**
+     * The short label for a run's swarm class — the class basename, so an index
+     * column shows `Example` not `App\Swarms\Example` (the full FQCN stays as the
+     * cell tooltip). Shared by every observability resource so the transform is
+     * defined once and testable directly.
+     */
+    public static function swarmLabel(?string $swarmClass): string
+    {
+        return $swarmClass === null ? '' : class_basename($swarmClass);
+    }
 }
