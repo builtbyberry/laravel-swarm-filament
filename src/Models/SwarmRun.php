@@ -18,9 +18,13 @@ use LogicException;
  * 1. **Plaintext-only.** A global scope restricts every query to the
  *    {@see DISPLAY_COLUMNS} whitelist, so the sealed columns (`context`,
  *    `output`, the `steps` IO) are never even selected — raw `sw0:` ciphertext
- *    can never reach a table cell. Sealed payloads are shown in DETAIL views
- *    through the v0.19 display contracts (`ReadableRunHistoryStore::findForDisplay`,
- *    `InspectsDurableRuns`), which display-decrypt per row — never this model.
+ *    can never reach a table cell, and a Filament column bound to a sealed
+ *    attribute (`$run->context`) resolves to `null` (unloaded), never ciphertext.
+ *    The scope governs the DEFAULT projection: an explicit `->addSelect('context')`
+ *    would re-add the sealed column, but no companion query does that — sealed
+ *    payloads are shown in DETAIL views through the v0.19 display contracts
+ *    (`ReadableRunHistoryStore::findForDisplay`, `InspectsDurableRuns`), which
+ *    display-decrypt per row — never this model.
  * 2. **Read-only intent.** The companion only ever reads; as a safety net an
  *    accidental model write (`save()`/`delete()`) fails loud. (This guards the
  *    model-instance path the companion actually uses; it is a display view, not

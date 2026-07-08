@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace BuiltByBerry\LaravelSwarmFilament\Support;
 
-use BuiltByBerry\LaravelSwarm\Persistence\SwarmPersistenceCipher;
-
 /**
  * The companion's single rendering rule for a display-decrypted field.
  *
@@ -23,6 +21,13 @@ use BuiltByBerry\LaravelSwarm\Persistence\SwarmPersistenceCipher;
  */
 final class DisplayField
 {
+    /**
+     * Core's persisted-cipher sentinel prefix. Inlined as a literal (with a test
+     * pinning it) rather than importing the `@internal` SwarmPersistenceCipher —
+     * a companion never couples to core internals (records 629/632).
+     */
+    private const SEALED_PREFIX = 'sw0:';
+
     public function __construct(
         public readonly ?string $value,
         public readonly bool $available,
@@ -42,7 +47,7 @@ final class DisplayField
 
         // Never render ciphertext: a still-sealed value is unavailable regardless
         // of the flag the upstream read set.
-        if ($value !== null && str_starts_with($value, SwarmPersistenceCipher::PREFIX)) {
+        if ($value !== null && str_starts_with($value, self::SEALED_PREFIX)) {
             return new self(null, false);
         }
 

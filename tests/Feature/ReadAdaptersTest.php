@@ -118,3 +118,45 @@ test('DisplayField stringifies non-string scalar values', function () {
     expect(DisplayField::fromRow(['n' => 42, 'n_available' => true], 'n')->display())->toBe('42')
         ->and(DisplayField::fromRow(['b' => false, 'b_available' => true], 'b')->display())->toBe('false');
 });
+
+test('SwarmRun resolves a bound sealed attribute to null via the accessor path, never ciphertext', function () {
+    readAdaptersSeedRun('run-1');
+
+    $run = SwarmRun::query()->first();
+
+    // The path a Filament TextColumn::make('context') renders through is the magic
+    // accessor $run->context (getAttribute) — the scope makes it null, not sw0:.
+    expect($run->context)->toBeNull()
+        ->and($run->output)->toBeNull()
+        ->and($run->steps)->toBeNull();
+});
+
+test('DisplayField degrades a null value flagged available to the placeholder', function () {
+    // The isAvailable() `value !== null` guard: a degraded upstream read (available
+    // flag true but value null) must still render the placeholder, not ''.
+    $field = DisplayField::fromRow(['input' => null, 'input_available' => true], 'input');
+
+    expect($field->isAvailable())->toBeFalse()
+        ->and($field->display())->toBe('unavailable');
+});
+
+test('DisplayField does not mask a value that merely contains sw0: mid-string', function () {
+    // Only a value STARTING with the sentinel is ciphertext; str_contains would over-mask.
+    $field = DisplayField::fromRow(['input' => 'saw sw0: in the logs', 'input_available' => true], 'input');
+
+    expect($field->isAvailable())->toBeTrue()
+        ->and($field->display())->toBe('saw sw0: in the logs');
+});
+
+test('DisplayField stringifies an array value via json_encode', function () {
+    $field = DisplayField::fromRow(['meta' => ['a' => 1], 'meta_available' => true], 'meta');
+
+    expect($field->display())->toBe('{"a":1}');
+});
+
+test('DisplayField renders an available empty string as-is (a real, non-placeholder value)', function () {
+    $field = DisplayField::fromRow(['input' => '', 'input_available' => true], 'input');
+
+    expect($field->isAvailable())->toBeTrue()
+        ->and($field->display())->toBe('');
+});
