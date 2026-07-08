@@ -50,40 +50,31 @@ class SwarmFilamentPlugin implements Plugin
 
     public function register(Panel $panel): void
     {
-        // Read-only observability resources are registered here as they land:
-        // runs, steps, durable state, memory, streaming, and audit health.
-        $panel->resources([
-            Resources\SwarmRunResource::class,
-            Resources\SwarmDurableRunResource::class,
-            Resources\SwarmMemorySnapshotResource::class,
-        ]);
-
-        // The streaming / causal-log viewer is a per-run standalone page (keyed by
-        // run id, reached from the runs explorer), so it is registered as a page,
-        // not a resource. It gates itself deny-by-default in canAccess().
-        $panel->pages([
-            Pages\ViewSwarmStream::class,
-        ]);
-
-        // Read-only observability pages (health dashboard, …). Every Swarm page
-        // extends SwarmPage, which applies the deny-by-default access gate.
-        $panel->pages([
-            Pages\SwarmHealthPage::class,
-        ]);
-
-        // Read-only observability widgets. Every Swarm widget extends SwarmWidget,
-        // which applies the deny-by-default view gate.
-        $panel->widgets([
-            Widgets\SwarmHealthWidget::class,
-        ]);
-
-        // Read-only audit surfaces: outbox health (a non-consuming index + a
-        // payload-minimized single-row detail) and the per-run audit trace.
-        $panel->pages([
-            Pages\AuditOutboxHealth::class,
-            Pages\AuditOutboxRecord::class,
-            Pages\AuditTrace::class,
-        ]);
+        // All read-only observability surfaces. Resources back the run-scoped
+        // explorers (runs, durable state, memory snapshots); the rest are
+        // standalone pages/widgets. Every surface gates itself deny-by-default —
+        // resources via SwarmResource, pages/widgets via SwarmPage/SwarmWidget.
+        $panel
+            ->resources([
+                Resources\SwarmRunResource::class,
+                Resources\SwarmDurableRunResource::class,
+                Resources\SwarmMemorySnapshotResource::class,
+            ])
+            ->pages([
+                // Per-run streaming / causal-log viewer (keyed by run id, reached
+                // from the runs explorer).
+                Pages\ViewSwarmStream::class,
+                // Health dashboard.
+                Pages\SwarmHealthPage::class,
+                // Audit surfaces: outbox health (non-consuming index + a
+                // payload-minimized single-row detail) and the per-run audit trace.
+                Pages\AuditOutboxHealth::class,
+                Pages\AuditOutboxRecord::class,
+                Pages\AuditTrace::class,
+            ])
+            ->widgets([
+                Widgets\SwarmHealthWidget::class,
+            ]);
     }
 
     public function boot(Panel $panel): void
