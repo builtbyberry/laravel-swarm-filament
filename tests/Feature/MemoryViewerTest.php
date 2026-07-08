@@ -126,6 +126,26 @@ test('the presenter renders a structured (array) value as compact JSON, redactio
     expect($presented['entries'][0]['value'])->toBe('{"name":"Ada","ssn":"[redacted]"}');
 });
 
+test('the presenter degrades a structured value hiding a nested sw0: string, never leaking the ciphertext', function () {
+    // A nested sealed string inside an array json-encodes to {"k":"sw0:..."},
+    // which slips past a top-level prefix check — the whole value must degrade.
+    $presented = MemorySnapshotPresenter::present(memoryViewerSnapshot([
+        ['scope' => 'run', 'scope_id' => 'r1', 'key' => 'profile', 'value' => ['secret' => 'sw0:abc']],
+    ]));
+
+    expect($presented['entries'][0]['value'])->toBe('unavailable')
+        ->and(json_encode($presented))->not->toContain('sw0:');
+});
+
+test('the presenter degrades a tool-call whose arguments hide a nested sw0: string', function () {
+    $presented = MemorySnapshotPresenter::present(memoryViewerSnapshot([], [
+        ['name' => 'search', 'arguments' => ['token' => 'sw0:abc'], 'result' => 'ok'],
+    ]));
+
+    expect($presented['tool_calls'][0]['arguments'])->toBe('unavailable')
+        ->and(json_encode($presented))->not->toContain('sw0:');
+});
+
 test('the presenter maps the tool-call timeline, stringifying arguments and degrading absent results', function () {
     $presented = MemorySnapshotPresenter::present(memoryViewerSnapshot([], [
         ['name' => 'search', 'arguments' => ['q' => 'rain'], 'result' => 'sunny', 'id' => 'c1'],
@@ -329,6 +349,10 @@ test('a snapshot sourced through SnapshotsMemory::find degrades sw0: + redacted 
 
     expect($presented['run_id'])->toBe($runId)
         ->and($presented['step_index'])->toBe(0)
+        // Summary timestamps must survive the contract→presenter mapping, or a
+        // key-name drift renders the detail header blank with a green suite.
+        ->and($presented['recorded_at'])->not->toBeNull()
+        ->and($presented['updated_at'])->not->toBeNull()
         ->and($presented['entry_count'])->toBe(3)
         // Clean value survives; redacted shows the marker; sw0: degrades.
         ->and($presented['entries'][0])->toMatchArray(['key' => 'clean', 'value' => 'hello'])
