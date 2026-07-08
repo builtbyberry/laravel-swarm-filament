@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use BuiltByBerry\LaravelSwarmFilament\Concerns\AuthorizesSwarmObservability;
+use BuiltByBerry\LaravelSwarmFilament\Pages\SwarmHealthPage;
 use BuiltByBerry\LaravelSwarmFilament\Support\SwarmObservabilityGate;
+use BuiltByBerry\LaravelSwarmFilament\Widgets\SwarmHealthWidget;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Support\Facades\Gate;
@@ -104,4 +106,61 @@ test('the defer branch short-circuits before consulting the gate', function () {
     Gate::define('viewSwarmObservability', fn (): bool => false);
 
     expect(SwarmObservabilityGate::allows())->toBeTrue();
+});
+
+/*
+ * Component #8 (finding #3-F5) — the health Page and Widget do NOT share the
+ * Resource trait: a Page authorizes through `canAccess(): bool` and a Widget
+ * through `canView(): bool` (different Filament signatures). Both must apply the
+ * same deny-by-default gate, factored into the SwarmPage / SwarmWidget bases so it
+ * cannot drift. These are gate tests only — no Livewire render.
+ */
+
+test('the health page canAccess denies by default and mirrors the gate', function () {
+    $this->actingAs(new GateStubUser);
+    config()->set('swarm-filament.authorization.ability', 'viewSwarmObservability');
+
+    // Deny-by-default: no Gate definition.
+    expect(SwarmHealthPage::canAccess())->toBeFalse();
+
+    Gate::define('viewSwarmObservability', fn (): bool => true);
+    expect(SwarmHealthPage::canAccess())->toBeTrue();
+
+    Gate::define('viewSwarmObservability', fn (): bool => false);
+    expect(SwarmHealthPage::canAccess())->toBeFalse();
+});
+
+test('the health page canAccess denies an unauthenticated user even with a permissive gate', function () {
+    config()->set('swarm-filament.authorization.ability', 'viewSwarmObservability');
+    Gate::define('viewSwarmObservability', fn (): bool => true);
+
+    // No actingAs — a panel always authenticates, so no-user is the safest denial.
+    expect(SwarmHealthPage::canAccess())->toBeFalse();
+});
+
+test('the health widget canView denies by default and mirrors the gate', function () {
+    $this->actingAs(new GateStubUser);
+    config()->set('swarm-filament.authorization.ability', 'viewSwarmObservability');
+
+    expect(SwarmHealthWidget::canView())->toBeFalse();
+
+    Gate::define('viewSwarmObservability', fn (): bool => true);
+    expect(SwarmHealthWidget::canView())->toBeTrue();
+
+    Gate::define('viewSwarmObservability', fn (): bool => false);
+    expect(SwarmHealthWidget::canView())->toBeFalse();
+});
+
+test('the health widget canView denies an unauthenticated user even with a permissive gate', function () {
+    config()->set('swarm-filament.authorization.ability', 'viewSwarmObservability');
+    Gate::define('viewSwarmObservability', fn (): bool => true);
+
+    expect(SwarmHealthWidget::canView())->toBeFalse();
+});
+
+test('the page and widget defer to Filament authorization when the ability is null', function () {
+    config()->set('swarm-filament.authorization.ability', null);
+
+    expect(SwarmHealthPage::canAccess())->toBeTrue()
+        ->and(SwarmHealthWidget::canView())->toBeTrue();
 });
