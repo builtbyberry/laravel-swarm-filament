@@ -27,7 +27,68 @@ public function panel(Panel $panel): Panel
 }
 ```
 
-Gate access to the observability surfaces in your host app (a Filament access policy or `canAccessPanel`) — the package is authorization-agnostic, matching Swarm's core read contracts.
+Optionally publish the config to customize the navigation group/sort and the
+authorization ability:
+
+```bash
+php artisan vendor:publish --tag=swarm-filament-config
+```
+
+## Authorization
+
+Access is **deny-by-default**. Every surface — resources, pages, and widgets —
+authorizes against a configurable [Gate](https://laravel.com/docs/authorization#gates)
+ability before it renders or appears in navigation:
+
+```php
+// config/swarm-filament.php
+'authorization' => [
+    'ability' => 'viewSwarmObservability',
+],
+```
+
+**You must define that Gate in your application to grant access.** Absent a Gate
+definition (or an authenticated user), the ability is denied and the surfaces stay
+hidden:
+
+```php
+use Illuminate\Support\Facades\Gate;
+
+Gate::define('viewSwarmObservability', fn ($user) => $user->is_admin);
+```
+
+To hand authorization entirely to Filament's own panel / resource policies instead,
+set the ability to `null` (or `''`) — the package then defers rather than gating:
+
+```php
+'authorization' => ['ability' => null],
+```
+
+The gate is applied in exactly one place per surface kind — resources through
+`SwarmResource`, pages through `SwarmPage`, widgets through `SwarmWidget` — so
+authorization cannot drift surface-to-surface.
+
+## Surfaces
+
+All read-only, all grouped under the configured navigation group (default `Swarm`):
+
+- **Runs explorer** — a filterable/sortable index of swarm runs with a per-run
+  detail view (status, topology, context, output, and the step timeline).
+- **Durable run inspector** — the full durable execution record: lifecycle
+  markers, parallel branches, child runs, hierarchical node outputs, waits,
+  signals, progress, and history.
+- **Memory viewer** — agent memory snapshots (policy-filtered at freeze time),
+  with redacted values shown as a clear marker.
+- **Streaming / causal-log viewer** — a per-run, per-node timeline of the
+  append-only causal log, with void-edge markers.
+- **Health dashboard** — a pass/fail readiness view of the durable and audit
+  persistence lanes (a page plus a companion widget).
+- **Audit surfaces** — a non-consuming outbox health dashboard (coexists with
+  the `swarm:relay` drainer), a single-row payload detail, and the per-run audit
+  trace.
+
+Sealed payloads are display-decrypted per field by laravel-swarm core; an
+undecryptable value renders as `unavailable`, never as `sw0:` ciphertext.
 
 ## License
 
