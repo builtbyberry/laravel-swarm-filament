@@ -8,9 +8,10 @@ use BuiltByBerry\LaravelSwarm\Contracts\ReadableRunHistoryStore;
 use BuiltByBerry\LaravelSwarmFilament\SwarmFilamentPlugin;
 use Filament\Contracts\Plugin;
 
-test('the service provider boots and registers the package view namespace', function () {
-    expect(view()->exists('swarm-filament::__nonexistent__'))->toBeFalse(); // namespace resolves, view absent
-    expect(app('view')->getFinder()->getHints())->toHaveKey('swarm-filament');
+test('the service provider registers the package view namespace and config', function () {
+    expect(app('view')->getFinder()->getHints())->toHaveKey('swarm-filament')
+        ->and(config('swarm-filament.authorization.ability'))->toBe('viewSwarmObservability')
+        ->and(config('swarm-filament.navigation.group'))->toBe('Swarm');
 });
 
 test('the plugin is a valid Filament plugin', function () {

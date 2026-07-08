@@ -41,7 +41,7 @@ class SwarmFilamentPlugin implements Plugin
     public static function get(): static
     {
         /** @var static $plugin */
-        $plugin = filament(static::class);
+        $plugin = filament(app(static::class)->getId());
 
         return $plugin;
     }
