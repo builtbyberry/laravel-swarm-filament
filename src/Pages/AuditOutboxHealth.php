@@ -92,18 +92,6 @@ final class AuditOutboxHealth extends Page
         );
     }
 
-    /**
-     * A Filament color token for an outbox status badge.
-     */
-    public static function statusColor(?string $status): string
-    {
-        return match ($status) {
-            'pending' => 'warning',
-            'dead_letter' => 'danger',
-            default => 'gray',
-        };
-    }
-
     public function content(Schema $schema): Schema
     {
         $data = $this->data();
@@ -161,7 +149,7 @@ final class AuditOutboxHealth extends Page
                 TextEntry::make('run_id')->label('Run')->placeholder('—')->fontFamily('mono'),
                 TextEntry::make('status')
                     ->badge()
-                    ->color(static fn (mixed $state): string => self::statusColor(is_string($state) ? $state : null)),
+                    ->color(static fn (mixed $state): string => OutboxHealthPresenter::statusColor(is_string($state) ? $state : null)),
                 TextEntry::make('attempts')->label('Attempts'),
                 TextEntry::make('last_error')->label('Last error')->columnSpanFull(),
                 TextEntry::make('created_at')->label('Created')->placeholder('—'),

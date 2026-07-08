@@ -30,7 +30,11 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
  */
 final class AuditOutboxRecord extends Page
 {
-    protected static ?string $slug = 'audit-outbox';
+    // A slug distinct from AuditOutboxHealth's: Filament derives the route NAME
+    // from the slug (filament.{panel}.pages.{slug}), so a shared slug would collide
+    // the two pages' route names even though their paths differ. The custom
+    // getRoutePath() keeps the human-facing URL under /audit-outbox/{record}.
+    protected static ?string $slug = 'audit-outbox-record';
 
     protected static ?string $title = 'Audit outbox record';
 
@@ -104,7 +108,7 @@ final class AuditOutboxRecord extends Page
                     TextEntry::make('category')->label('Category')->state($data['category']),
                     TextEntry::make('status')
                         ->badge()
-                        ->color(AuditOutboxHealth::statusColor(is_string($data['status']) ? $data['status'] : null))
+                        ->color(OutboxHealthPresenter::statusColor(is_string($data['status']) ? $data['status'] : null))
                         ->state($data['status']),
                     TextEntry::make('run_id')->label('Run')->fontFamily('mono')->placeholder('—')->state($data['run_id']),
                     TextEntry::make('attempts')->label('Attempts')->state($data['attempts']),

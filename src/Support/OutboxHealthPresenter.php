@@ -72,6 +72,20 @@ final class OutboxHealthPresenter
     }
 
     /**
+     * A Filament color token for an outbox row status. Lives on the presenter so the
+     * health list and the single-row detail badge share one mapping and can never
+     * diverge across a page refactor.
+     */
+    public static function statusColor(?string $status): string
+    {
+        return match ($status) {
+            'pending' => 'warning',
+            'dead_letter' => 'danger',
+            default => 'gray',
+        };
+    }
+
+    /**
      * @param  array<int, array<string, mixed>>  $rows
      * @return list<array<string, mixed>>
      */

@@ -16,9 +16,13 @@ use BuiltByBerry\LaravelSwarmFilament\Support\OutboxHealthPresenter;
 use Illuminate\Config\Repository;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Encryption\Encrypter;
+use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Psr\Log\NullLogger;
+
+class AuditGateUser extends Authenticatable {}
 
 /*
  * Component #10 — the audit surfaces. Two read-only lanes over the public v0.19
@@ -323,10 +327,17 @@ test('the trace resolve wires the bound sink — default is the no-op empty-stat
 test('the outbox health page reads the real contract, non-consuming and payload-minimized', function () {
     $outbox = auditUseDatabase();
 
+    // Prove list-side last_error masking end-to-end (not just via the presenter
+    // unit): a sealed, undecryptable last_error must degrade in the real read path.
+    config()->set('swarm.persistence.decrypt_failure_policy', 'throw');
+
     // Seed via the real outbox (it also implements AuditOutbox::enqueue).
     $outbox->enqueue('run.started', ['run_id' => 'run-1', 'detail' => 'first']);
     $outbox->enqueue('step.completed', ['run_id' => 'run-2', 'detail' => 'second']);
     $outbox->enqueue('run.failed', ['run_id' => 'run-3', 'detail' => 'boom'], deadLetter: true);
+
+    // Poison the newest pending row's last_error with a foreign-key sealed value.
+    DB::table('swarm_audit_outbox')->where('run_id', 'run-2')->update(['last_error' => auditPoison('exploded')]);
 
     $presented = AuditOutboxHealth::resolve($outbox);
 
@@ -337,11 +348,15 @@ test('the outbox health page reads the real contract, non-consuming and payload-
         // Newest first, metadata + last_error only — never the payload.
         ->and($presented['pending'][0]['category'])->toBe('step.completed')
         ->and($presented['pending'][0])->not->toHaveKey('payload')
+        // The poison last_error degrades in the real LIST path, never leaking sw0:.
+        ->and($presented['pending'][0]['last_error'])->toBe('unavailable')
         ->and($presented['dead_lettered'][0]['category'])->toBe('run.failed');
 
-    // No decrypted evidence detail ('first'/'second'/'boom') leaks into the list.
+    // No decrypted evidence detail ('first'/'second'/'boom') leaks into the list,
+    // and no ciphertext survives anywhere in the presented health data.
     expect(json_encode($presented))->not->toContain('first')
-        ->and(json_encode($presented))->not->toContain('boom');
+        ->and(json_encode($presented))->not->toContain('boom')
+        ->and(json_encode($presented))->not->toContain('sw0:');
 
     // Read again — a pure SELECT must never reserve or delete the drainer's rows.
     AuditOutboxHealth::resolve($outbox);
@@ -401,18 +416,52 @@ test('the outbox health page renders a clean empty-state when the outbox is unav
 // Page shape: read-only, config-driven navigation, deny-by-default access.
 // ---------------------------------------------------------------------------
 
-test('the audit pages authorize through the shared observability gate', function () {
+test('every audit page denies by default when the ability has no Gate definition', function () {
+    $this->actingAs(new AuditGateUser);
     config()->set('swarm-filament.authorization.ability', 'viewSwarmObservability');
 
-    // Deny-by-default: no Gate definition.
     expect(AuditOutboxHealth::canAccess())->toBeFalse()
         ->and(AuditOutboxRecord::canAccess())->toBeFalse()
         ->and(AuditTrace::canAccess())->toBeFalse();
+});
 
+test('every audit page grants when the host Gate allows the ability', function () {
+    // The record page (the payload-evidence surface) MUST be reachable under a
+    // granted gate — a hardcoded false here would lock operators out silently.
+    $this->actingAs(new AuditGateUser);
+    config()->set('swarm-filament.authorization.ability', 'viewSwarmObservability');
+    Gate::define('viewSwarmObservability', fn (): bool => true);
+
+    expect(AuditOutboxHealth::canAccess())->toBeTrue()
+        ->and(AuditOutboxRecord::canAccess())->toBeTrue()
+        ->and(AuditTrace::canAccess())->toBeTrue();
+});
+
+test('every audit page denies when the host Gate denies the ability', function () {
+    $this->actingAs(new AuditGateUser);
+    config()->set('swarm-filament.authorization.ability', 'viewSwarmObservability');
+    Gate::define('viewSwarmObservability', fn (): bool => false);
+
+    expect(AuditOutboxHealth::canAccess())->toBeFalse()
+        ->and(AuditOutboxRecord::canAccess())->toBeFalse()
+        ->and(AuditTrace::canAccess())->toBeFalse();
+});
+
+test('every audit page denies an unauthenticated user even with a permissive Gate', function () {
+    config()->set('swarm-filament.authorization.ability', 'viewSwarmObservability');
+    Gate::define('viewSwarmObservability', fn (): bool => true);
+
+    // No actingAs — a panel always authenticates, so no-user is the safest denial.
+    expect(AuditOutboxHealth::canAccess())->toBeFalse()
+        ->and(AuditOutboxRecord::canAccess())->toBeFalse()
+        ->and(AuditTrace::canAccess())->toBeFalse();
+});
+
+test('every audit page defers to Filament authorization when the ability is null', function () {
     config()->set('swarm-filament.authorization.ability', null);
 
-    // Deferred to Filament's own authorization.
     expect(AuditOutboxHealth::canAccess())->toBeTrue()
+        ->and(AuditOutboxRecord::canAccess())->toBeTrue()
         ->and(AuditTrace::canAccess())->toBeTrue();
 });
 
@@ -435,9 +484,19 @@ test('the audit page navigation group and sort are config-driven', function () {
     expect(AuditOutboxHealth::getNavigationSort())->toBeNull();
 });
 
-test('the outbox status color maps each status to a Filament token', function () {
-    expect(AuditOutboxHealth::statusColor('pending'))->toBe('warning')
-        ->and(AuditOutboxHealth::statusColor('dead_letter'))->toBe('danger')
-        ->and(AuditOutboxHealth::statusColor('anything'))->toBe('gray')
-        ->and(AuditOutboxHealth::statusColor(null))->toBe('gray');
+test('the shared outbox status color maps each status to a Filament token', function () {
+    // Lives on the presenter so the list and the detail badge share one mapping.
+    expect(OutboxHealthPresenter::statusColor('pending'))->toBe('warning')
+        ->and(OutboxHealthPresenter::statusColor('dead_letter'))->toBe('danger')
+        ->and(OutboxHealthPresenter::statusColor('anything'))->toBe('gray')
+        ->and(OutboxHealthPresenter::statusColor(null))->toBe('gray');
+});
+
+test('the outbox health and record pages register under distinct slugs and route names', function () {
+    // Filament derives the route NAME from the slug; a shared slug would collide
+    // the two pages' route names and make getUrl() ambiguous (one clobbers the
+    // other). Their slugs — and therefore relative route names — must differ.
+    expect(AuditOutboxRecord::getSlug())->not->toBe(AuditOutboxHealth::getSlug())
+        ->and(AuditOutboxRecord::getSlug())->toBe('audit-outbox-record')
+        ->and(AuditOutboxHealth::getSlug())->toBe('audit-outbox');
 });
