@@ -9,8 +9,8 @@
         </x-slot>
 
         <x-slot name="afterHeader">
-            <x-filament::badge :color="$report->color()" class="fi-swarm-health-overall">
-                {{ \Illuminate\Support\Str::ucfirst($report->status) }}
+            <x-filament::badge :color="$report->status->getColor()" class="fi-swarm-health-overall">
+                {{ $report->status->label() }}
             </x-filament::badge>
         </x-slot>
 
@@ -20,7 +20,7 @@
                     wire:key="swarm-health-{{ $check->key }}"
                     class="fi-swarm-health-check flex items-start justify-between gap-3 py-3"
                     data-check="{{ $check->key }}"
-                    data-status="{{ $check->status }}"
+                    data-status="{{ $check->status->value }}"
                 >
                     <div class="min-w-0">
                         <p class="text-sm font-medium text-gray-950 dark:text-white">
@@ -31,8 +31,8 @@
                         </p>
                     </div>
 
-                    <x-filament::badge :color="$check->color()">
-                        {{ \Illuminate\Support\Str::ucfirst($check->status) }}
+                    <x-filament::badge :color="$check->status->getColor()">
+                        {{ $check->status->label() }}
                     </x-filament::badge>
                 </li>
             @endforeach

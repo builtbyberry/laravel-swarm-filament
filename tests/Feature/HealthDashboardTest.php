@@ -8,6 +8,7 @@ use BuiltByBerry\LaravelSwarm\Responses\DurableRunDetail;
 use BuiltByBerry\LaravelSwarmFilament\Pages\SwarmHealthPage;
 use BuiltByBerry\LaravelSwarmFilament\Pages\SwarmPage;
 use BuiltByBerry\LaravelSwarmFilament\Support\HealthCheck;
+use BuiltByBerry\LaravelSwarmFilament\Support\HealthStatus;
 use BuiltByBerry\LaravelSwarmFilament\Support\SwarmHealthReport;
 use BuiltByBerry\LaravelSwarmFilament\Widgets\SwarmHealthWidget;
 use BuiltByBerry\LaravelSwarmFilament\Widgets\SwarmWidget;
@@ -126,10 +127,10 @@ test('both lanes reachable and clean → overall pass and ok', function () {
     $checks = healthChecksByKey($report);
 
     expect($report->ok)->toBeTrue()
-        ->and($report->status)->toBe(SwarmHealthReport::PASS)
+        ->and($report->status)->toBe(HealthStatus::Pass)
         ->and($report->checks)->toHaveCount(2)
-        ->and($checks['durable']->status)->toBe(SwarmHealthReport::PASS)
-        ->and($checks['audit']->status)->toBe(SwarmHealthReport::PASS)
+        ->and($checks['durable']->status)->toBe(HealthStatus::Pass)
+        ->and($checks['audit']->status)->toBe(HealthStatus::Pass)
         // The pending count is surfaced (a non-sensitive count, never a payload).
         ->and($checks['audit']->summary)->toContain('2 pending');
 });
@@ -140,11 +141,11 @@ test('dead-letter rows fail the audit lane and flip overall ok', function () {
     $checks = healthChecksByKey($report);
 
     expect($report->ok)->toBeFalse()
-        ->and($report->status)->toBe(SwarmHealthReport::FAIL)
-        ->and($checks['audit']->status)->toBe(SwarmHealthReport::FAIL)
+        ->and($report->status)->toBe(HealthStatus::Fail)
+        ->and($checks['audit']->status)->toBe(HealthStatus::Fail)
         ->and($checks['audit']->summary)->toContain('3 undelivered audit record(s)')
         // Durable is unaffected.
-        ->and($checks['durable']->status)->toBe(SwarmHealthReport::PASS);
+        ->and($checks['durable']->status)->toBe(HealthStatus::Pass);
 });
 
 test('an unreachable durable store degrades that lane without failing overall ok', function () {
@@ -155,9 +156,12 @@ test('an unreachable durable store degrades that lane without failing overall ok
     $checks = healthChecksByKey($report);
 
     expect($report->ok)->toBeTrue()
-        ->and($report->status)->toBe(SwarmHealthReport::DEGRADED)
-        ->and($checks['durable']->status)->toBe(SwarmHealthReport::DEGRADED)
-        ->and($checks['durable']->summary)->toContain('may not be configured');
+        ->and($report->status)->toBe(HealthStatus::Degraded)
+        ->and($checks['durable']->status)->toBe(HealthStatus::Degraded)
+        ->and($checks['durable']->summary)->toContain('may not be configured')
+        // The raw thrown text must NOT leak into the summary — a read-only viewer
+        // must never see schema/connection detail (HealthCheck's leak invariant).
+        ->and($checks['durable']->summary)->not->toContain('unreachable');
 });
 
 test('an audit outbox with no persistent store is degraded, not failed', function () {
@@ -166,8 +170,8 @@ test('an audit outbox with no persistent store is degraded, not failed', functio
     $checks = healthChecksByKey($report);
 
     expect($report->ok)->toBeTrue()
-        ->and($report->status)->toBe(SwarmHealthReport::DEGRADED)
-        ->and($checks['audit']->status)->toBe(SwarmHealthReport::DEGRADED)
+        ->and($report->status)->toBe(HealthStatus::Degraded)
+        ->and($checks['audit']->status)->toBe(HealthStatus::Degraded)
         ->and($checks['audit']->summary)->toContain('not backed by a persistent store');
 });
 
@@ -177,7 +181,7 @@ test('a throwing audit summary degrades rather than propagating — the surface 
     $checks = healthChecksByKey($report);
 
     expect($report->ok)->toBeTrue()
-        ->and($checks['audit']->status)->toBe(SwarmHealthReport::DEGRADED)
+        ->and($checks['audit']->status)->toBe(HealthStatus::Degraded)
         ->and($checks['audit']->summary)->toBe('Audit outbox did not respond.');
 });
 
@@ -185,24 +189,28 @@ test('a hard fail outranks a degraded lane in the overall status', function () {
     // durable degraded + audit fail → overall must be fail, not degraded.
     $report = SwarmHealthReport::for(healthDurableStub(false), healthAuditStub(healthAuditSummary(deadLetter: 1)));
 
-    expect($report->status)->toBe(SwarmHealthReport::FAIL)
+    expect($report->status)->toBe(HealthStatus::Fail)
         ->and($report->ok)->toBeFalse();
 });
 
-test('the report exposes a Filament color token per status', function () {
-    expect(SwarmHealthReport::for(healthDurableStub(true), healthAuditStub(healthAuditSummary()))->color())->toBe('success')
-        ->and(SwarmHealthReport::for(healthDurableStub(true), healthAuditStub(healthAuditSummary(deadLetter: 1)))->color())->toBe('danger')
-        ->and(SwarmHealthReport::for(healthDurableStub(false), healthAuditStub(healthAuditSummary()))->color())->toBe('gray');
+test('the status enum is the single home for the Filament color token', function () {
+    // Colour lives in exactly one place (HealthStatus::getColor) — the report and
+    // the checks both read it straight off the enum.
+    expect(HealthStatus::Pass->getColor())->toBe('success')
+        ->and(HealthStatus::Fail->getColor())->toBe('danger')
+        ->and(HealthStatus::Degraded->getColor())->toBe('gray')
+        ->and(HealthStatus::Pass->label())->toBe('Pass')
+        ->and(HealthStatus::Degraded->label())->toBe('Degraded');
 });
 
-test('a health check reports its predicate helpers and color token', function () {
-    $pass = new HealthCheck('k', 'Label', SwarmHealthReport::PASS, 's');
-    $fail = new HealthCheck('k', 'Label', SwarmHealthReport::FAIL, 's');
-    $degraded = new HealthCheck('k', 'Label', SwarmHealthReport::DEGRADED, 's');
+test('a health check reports its predicate helpers off the status enum', function () {
+    $pass = new HealthCheck('k', 'Label', HealthStatus::Pass, 's');
+    $fail = new HealthCheck('k', 'Label', HealthStatus::Fail, 's');
+    $degraded = new HealthCheck('k', 'Label', HealthStatus::Degraded, 's');
 
-    expect($pass->passed())->toBeTrue()->and($pass->color())->toBe('success')
-        ->and($fail->failed())->toBeTrue()->and($fail->color())->toBe('danger')
-        ->and($degraded->degraded())->toBeTrue()->and($degraded->color())->toBe('gray');
+    expect($pass->passed())->toBeTrue()->and($pass->status->getColor())->toBe('success')
+        ->and($fail->failed())->toBeTrue()->and($fail->status->getColor())->toBe('danger')
+        ->and($degraded->degraded())->toBeTrue()->and($degraded->status->getColor())->toBe('gray');
 });
 
 test('the durable probe never reads a real run — the sentinel id is looked up', function () {
@@ -275,14 +283,19 @@ test('the health widget is a SwarmWidget bound to the health widget view', funct
 });
 
 test('the page and widget resolve a report through the real bound read seams', function () {
-    // In the harness (cache persistence) the durable inspector is DB-backed with
-    // no migrated tables → degraded, and the audit outbox is the no-op → degraded.
-    // The point: report() resolves the public contracts and never throws.
+    // In the harness (cache persistence) the durable inspector is DB-backed with no
+    // migrated tables and the audit outbox is the no-op — both lanes degrade, so the
+    // real verdict is DEGRADED but ok (no hard fail). Asserting the actual verdict —
+    // not just instanceof — catches a container binding that starts throwing or
+    // mis-reporting rather than degrading.
     $pageReport = (new SwarmHealthPage)->report();
     $widgetReport = (new SwarmHealthWidget)->report();
 
     expect($pageReport)->toBeInstanceOf(SwarmHealthReport::class)
         ->and($pageReport->checks)->toHaveCount(2)
+        ->and($pageReport->status)->toBe(HealthStatus::Degraded)
+        ->and($pageReport->ok)->toBeTrue()
         ->and($widgetReport)->toBeInstanceOf(SwarmHealthReport::class)
-        ->and($widgetReport->checks)->toHaveCount(2);
+        ->and($widgetReport->status)->toBe(HealthStatus::Degraded)
+        ->and($widgetReport->ok)->toBeTrue();
 });

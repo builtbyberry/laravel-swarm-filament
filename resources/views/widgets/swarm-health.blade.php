@@ -5,8 +5,8 @@
         <x-slot name="heading">Swarm health</x-slot>
 
         <x-slot name="afterHeader">
-            <x-filament::badge :color="$report->color()" class="fi-swarm-health-overall">
-                {{ \Illuminate\Support\Str::ucfirst($report->status) }}
+            <x-filament::badge :color="$report->status->getColor()" class="fi-swarm-health-overall">
+                {{ $report->status->label() }}
             </x-filament::badge>
         </x-slot>
 
@@ -16,14 +16,14 @@
                     wire:key="swarm-health-widget-{{ $check->key }}"
                     class="fi-swarm-health-check flex items-center justify-between gap-3 rounded-lg bg-gray-50 px-3 py-2 dark:bg-white/5"
                     data-check="{{ $check->key }}"
-                    data-status="{{ $check->status }}"
+                    data-status="{{ $check->status->value }}"
                 >
                     <span class="truncate text-sm font-medium text-gray-950 dark:text-white">
                         {{ $check->label }}
                     </span>
 
-                    <x-filament::badge :color="$check->color()">
-                        {{ \Illuminate\Support\Str::ucfirst($check->status) }}
+                    <x-filament::badge :color="$check->status->getColor()">
+                        {{ $check->status->label() }}
                     </x-filament::badge>
                 </div>
             @endforeach
