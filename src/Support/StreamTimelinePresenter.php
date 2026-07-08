@@ -6,7 +6,6 @@ namespace BuiltByBerry\LaravelSwarmFilament\Support;
 
 use BuiltByBerry\LaravelSwarm\Contracts\StreamEventStore;
 use BuiltByBerry\LaravelSwarm\Streaming\Events\SwarmStreamEvent;
-use Filament\Infolists\Components\CodeEntry;
 
 /**
  * Folds a run's append-only causal log into a per-node timeline for display.
@@ -51,6 +50,12 @@ final class StreamTimelinePresenter
      * UUID, so this NUL-prefixed sentinel can never collide with one.
      */
     private const TOP_LEVEL_KEY = "\0top-level";
+
+    /**
+     * The placeholder a masked (still-sealed) payload leaf renders as. Matches the
+     * sibling {@see RunDisplayPresenter} so the two surfaces read identically.
+     */
+    private const UNAVAILABLE = 'unavailable';
 
     /**
      * Read a run's causal log through the {@see StreamEventStore}
@@ -337,9 +342,9 @@ final class StreamTimelinePresenter
     }
 
     /**
-     * Pretty-print the payload for a {@see CodeEntry},
-     * with every string leaf routed through {@see DisplayField} so a still-sealed
-     * `sw0:` value is masked rather than rendered (defense in depth).
+     * Pretty-print the payload for the timeline's code block, with every string
+     * leaf routed through {@see DisplayField} so a still-sealed `sw0:` value is
+     * masked rather than rendered (defense in depth).
      *
      * @param  array<string, mixed>  $payload
      */
@@ -366,7 +371,7 @@ final class StreamTimelinePresenter
         if (is_string($value)) {
             $field = DisplayField::fromRow(['v' => $value], 'v');
 
-            return $field->isAvailable() ? $value : '[unavailable]';
+            return $field->isAvailable() ? $value : self::UNAVAILABLE;
         }
 
         return $value;

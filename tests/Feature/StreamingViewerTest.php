@@ -5,6 +5,7 @@ declare(strict_types=1);
 use BuiltByBerry\LaravelSwarm\Contracts\CausalLogStore;
 use BuiltByBerry\LaravelSwarm\Contracts\StreamEventStore;
 use BuiltByBerry\LaravelSwarm\Streaming\Events\CausalVoidEdgeType;
+use BuiltByBerry\LaravelSwarm\Streaming\Events\SwarmCausalVoidEdge;
 use BuiltByBerry\LaravelSwarm\Streaming\Events\SwarmStepStart;
 use BuiltByBerry\LaravelSwarm\Streaming\Events\SwarmStreamEvent;
 use BuiltByBerry\LaravelSwarm\Streaming\Events\SwarmStreamStart;
@@ -71,6 +72,23 @@ test('the presenter groups events by node in first-seen order, preserving each n
         ->and($timeline['nodes'][1]['events'][0]['event_id'])->toBe('b')
         ->and($timeline['nodes'][1]['events'][1]['event_id'])->toBe('c')
         ->and($timeline['nodes'][2]['node_id'])->toBe('n2');
+});
+
+test('the presenter preserves per-node causal order when nodes interleave', function () {
+    // The real coordinator/parallel shape: two nodes' events arrive interleaved.
+    // Each node must fold back to its own causal order, first-seen node order kept.
+    $timeline = StreamTimelinePresenter::build([
+        ['id' => 'a', 'type' => 'swarm_step_start', 'node_id' => 'n1', 'timestamp' => 1],
+        ['id' => 'x', 'type' => 'swarm_step_start', 'node_id' => 'n2', 'timestamp' => 2],
+        ['id' => 'b', 'type' => 'swarm_step_end', 'node_id' => 'n1', 'timestamp' => 3],
+        ['id' => 'y', 'type' => 'swarm_step_end', 'node_id' => 'n2', 'timestamp' => 4],
+    ]);
+
+    expect($timeline['node_count'])->toBe(2)
+        ->and($timeline['nodes'][0]['node_id'])->toBe('n1')
+        ->and(array_column($timeline['nodes'][0]['events'], 'event_id'))->toBe(['a', 'b'])
+        ->and($timeline['nodes'][1]['node_id'])->toBe('n2')
+        ->and(array_column($timeline['nodes'][1]['events'], 'event_id'))->toBe(['x', 'y']);
 });
 
 test('the presenter annotates a voided event and emits a void marker beside its target', function () {
@@ -165,7 +183,22 @@ test('the presenter masks a still-sw0 payload leaf as defense in depth', functio
     $payload = $timeline['nodes'][0]['events'][0]['payload'];
 
     expect($payload)->not->toContain('sw0:leaked-ciphertext')
-        ->and($payload)->toContain('[unavailable]');
+        ->and($payload)->toContain('unavailable');
+});
+
+test('the presenter masks a still-sw0 leaf nested inside a payload array', function () {
+    // The leak that matters: scrub() must recurse into nested structures like the
+    // tool_call/tool_result arrays where a sealed value realistically hides.
+    $timeline = StreamTimelinePresenter::build([
+        ['id' => 'e', 'type' => 'swarm_tool_call', 'node_id' => 'n1', 'tool_call' => ['name' => 'search', 'arguments' => 'sw0:nested-secret'], 'timestamp' => 1],
+    ]);
+
+    $payload = $timeline['nodes'][0]['events'][0]['payload'];
+
+    expect($payload)->not->toContain('sw0:nested-secret')
+        ->and($payload)->toContain('unavailable')
+        // The non-sealed sibling in the same nested array survives untouched.
+        ->and($payload)->toContain('search');
 });
 
 test('the presenter builds ciphertext-safe structural summaries and labels', function () {
@@ -218,6 +251,20 @@ test('resolve renders the timeline for a purged run whose events still stream', 
     expect($resolved['run']['run_id'])->toBe('r1')
         ->and($resolved['run']['status_color'])->toBe('gray')
         ->and($resolved['timeline']['event_count'])->toBe(1);
+});
+
+test('resolve renders (not 404) when only a void-edge survives the window', function () {
+    // A run whose events aged out but whose void-edge remains: event_count=0,
+    // void_edge_count=1. The `|| void_edge_count > 0` branch must keep it alive.
+    $store = streamingViewerStore([
+        new SwarmCausalVoidEdge(id: 'edge', runId: 'r1', voidType: CausalVoidEdgeType::Abandons, targetEventId: 'gone', reason: 'aged out', timestamp: 1),
+    ]);
+
+    $resolved = ViewSwarmStream::resolve($store, null, 'r1');
+
+    expect($resolved['timeline']['event_count'])->toBe(0)
+        ->and($resolved['timeline']['void_edge_count'])->toBe(1)
+        ->and($resolved['run']['run_id'])->toBe('r1');
 });
 
 // ---------------------------------------------------------------------------
@@ -316,5 +363,5 @@ test('a run timeline sourced through StreamEventStore groups nodes, marks voids,
 
     // No sw0: ciphertext survives anywhere in the folded timeline.
     expect(json_encode($timeline))->not->toContain('sw0:should-not-leak')
-        ->and(json_encode($timeline))->toContain('[unavailable]');
+        ->and(json_encode($timeline))->toContain('unavailable');
 });

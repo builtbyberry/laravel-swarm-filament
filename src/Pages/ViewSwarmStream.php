@@ -15,6 +15,7 @@ use Filament\Infolists\Components\TextEntry;
 use Filament\Pages\Page;
 use Filament\Panel;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
@@ -180,7 +181,9 @@ class ViewSwarmStream extends Page
                         TextEntry::make('marker')
                             ->hiddenLabel()
                             ->badge(fn (?string $state): bool => filled($state))
-                            ->color('warning')
+                            // Per-row severity from the sibling key: danger for a
+                            // missing/out-of-window void target, warning otherwise.
+                            ->color(fn (Get $get): string => is_string($color = $get('marker_color')) ? $color : 'warning')
                             ->columnSpanFull(),
                         CodeEntry::make('payload')
                             ->hiddenLabel()
