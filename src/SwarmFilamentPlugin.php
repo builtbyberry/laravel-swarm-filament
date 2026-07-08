@@ -55,6 +55,7 @@ class SwarmFilamentPlugin implements Plugin
         $panel->resources([
             Resources\SwarmRunResource::class,
             Resources\SwarmDurableRunResource::class,
+            Resources\SwarmMemorySnapshotResource::class,
         ]);
     }
 
