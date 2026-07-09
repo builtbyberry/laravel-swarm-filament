@@ -18,7 +18,6 @@ use BuiltByBerry\LaravelSwarmFilament\Support\RunGraph;
 use BuiltByBerry\LaravelSwarmFilament\Support\StreamTimelinePresenter;
 use BuiltByBerry\LaravelSwarmFilament\Support\WorkflowGraphPresenter;
 use Filament\Actions\Action;
-use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Components\ViewEntry;
 use Filament\Resources\Pages\ViewRecord;
@@ -187,33 +186,21 @@ final class ViewSwarmRun extends ViewRecord
     }
 
     /**
-     * The Audit trail section content: the run's evidence records when a readable
-     * sink is bound, otherwise the presenter's plain-language note (e.g. core's
-     * default sink stores nothing).
+     * The Audit trail section content: a compact one-line-per-event timeline of the
+     * run's emitted evidence when a readable sink is bound, otherwise the presenter's
+     * plain-language empty-state note (e.g. core's default sink stores nothing). Both
+     * cases are handled inside the timeline partial from the presenter record.
      *
      * @param  array<string, mixed>  $audit  an {@see AuditTracePresenter::present()} record
      * @return list<Component>
      */
     private static function auditSchema(array $audit): array
     {
-        $records = is_array($audit['records'] ?? null) ? $audit['records'] : [];
-        $notes = is_array($audit['notes'] ?? null) ? array_values(array_filter($audit['notes'], 'is_string')) : [];
-
-        if ($records === []) {
-            return [
-                TextEntry::make('audit_note')->hiddenLabel()
-                    ->state($notes[0] ?? 'No audit evidence recorded for this run.'),
-            ];
-        }
-
         return [
-            RepeatableEntry::make('audit')
+            ViewEntry::make('audit')
                 ->hiddenLabel()
-                ->state($records)
-                ->schema([
-                    TextEntry::make('category')->badge(),
-                    TextEntry::make('occurred_at')->label('When')->dateTime()->placeholder('—'),
-                ]),
+                ->view('swarm-filament::audit-timeline')
+                ->state($audit),
         ];
     }
 
