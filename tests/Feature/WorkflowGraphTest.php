@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use BuiltByBerry\LaravelSwarmFilament\Resources\SwarmRunResource\Pages\ViewSwarmRun;
 use BuiltByBerry\LaravelSwarmFilament\Support\RunDisplayPresenter;
 use BuiltByBerry\LaravelSwarmFilament\Support\RunGraph;
 use BuiltByBerry\LaravelSwarmFilament\Support\WorkflowGraphPresenter;
@@ -263,6 +264,181 @@ test('durable node outputs without branches chain in recorded order under the ro
 
     expect($graph['edges'])->toContainEqual(['from' => 'run', 'to' => 'node:step:0', 'kind' => 'node'])
         ->and($graph['edges'])->toContainEqual(['from' => 'node:step:0', 'to' => 'node:step:1', 'kind' => 'node']);
+});
+
+test('the durable DAG grafts each branch its sealed-rendered I/O, tokens, duration, attempts + memory facets', function () {
+    // The per-node detail F20 said fromDurable dropped: input/output (display-
+    // decrypted), token usage, duration_ms, attempts, and memory by step_index.
+    $graph = RunGraph::fromDurable([
+        'summary' => ['swarm_class' => 'App\\Swarms\\Triage', 'status' => 'completed'],
+        'branches' => [
+            ['node_id' => 'billing', 'parent_node_id' => 'root', 'agent_class' => 'App\\Agents\\Billing', 'status' => 'completed',
+                'step_index' => 1, 'input' => 'the refund request', 'input_available' => true,
+                'output' => '[Billing] Approved the refund.', 'output_available' => true,
+                'usage' => ['prompt_tokens' => 100, 'completion_tokens' => 40], 'duration_ms' => 850, 'attempts' => 2],
+        ],
+        'children' => [],
+        'node_outputs' => [],
+    ], [1 => ['wrote' => ['decision'], 'entries' => [['key' => 'decision', 'value' => 'refund', 'scope' => 'run']], 'tools' => ['lookup']]]);
+
+    $byId = collect($graph['nodes'])->keyBy('id');
+    expect($byId['node:billing']['detail_input'])->toBe('the refund request')
+        ->and($byId['node:billing']['detail_output'])->toBe('[Billing] Approved the refund.')
+        // summary strips the leading "[Agent] " label like fromRun does
+        ->and($byId['node:billing']['summary'])->toBe('Approved the refund.')
+        ->and($byId['node:billing']['tokens'])->toBe(140)
+        ->and($byId['node:billing']['detail_duration'])->toBe('850ms')
+        ->and($byId['node:billing']['detail_attempts'])->toBe(2)
+        // memory facets join by step_index
+        ->and($byId['node:billing']['detail_wrote'])->toBe(['decision'])
+        ->and($byId['node:billing']['detail_tools'])->toBe(['lookup'])
+        ->and($byId['node:billing']['detail_memory'][0]['value'])->toBe('refund');
+});
+
+test('the durable DAG routes an unavailable / nested-sealed branch payload through the chokepoint (never raw)', function () {
+    $graph = RunGraph::fromDurable([
+        'summary' => ['swarm_class' => 'App\\Swarms\\Triage', 'status' => 'completed'],
+        'branches' => [
+            // input failed to decrypt (available=false); output carries a nested sw0: leaf.
+            ['node_id' => 'tech', 'parent_node_id' => 'root', 'agent_class' => 'App\\Agents\\Tech', 'status' => 'completed',
+                'step_index' => 2, 'input' => null, 'input_available' => false,
+                'output' => ['answer' => 'sw0:sealed', 'lang' => 'en'], 'output_available' => true],
+        ],
+        'children' => [],
+        'node_outputs' => [],
+    ]);
+
+    $byId = collect($graph['nodes'])->keyBy('id');
+    // undecryptable input degrades to the marker, never null/ciphertext
+    expect($byId['node:tech']['detail_input'])->toBe('unavailable')
+        // the nested sealed leaf is masked; the plaintext sibling survives (partial mask)
+        ->and($byId['node:tech']['detail_output'])->toBe('{"answer":"unavailable","lang":"en"}')
+        ->and($byId['node:tech']['detail_output'])->not->toContain('sw0:');
+});
+
+test('a durable child run surfaces as a node with its sealed-rendered context + output', function () {
+    $graph = RunGraph::fromDurable([
+        'summary' => ['swarm_class' => 'App\\Swarms\\Parent', 'status' => 'completed'],
+        'branches' => [],
+        'children' => [
+            ['child_run_id' => 'sub-1', 'child_swarm_class' => 'App\\Swarms\\SubFlow', 'status' => 'completed',
+                'context_payload' => 'the sub task', 'context_available' => true,
+                'output' => 'the sub result', 'output_available' => true],
+        ],
+        'node_outputs' => [],
+    ]);
+
+    $byId = collect($graph['nodes'])->keyBy('id');
+    expect($byId['child:sub-1']['detail_input'])->toBe('the sub task')
+        ->and($byId['child:sub-1']['detail_output'])->toBe('the sub result')
+        ->and($byId['child:sub-1']['summary'])->toBe('the sub result');
+});
+
+test('a bare durable node output is sealed-rendered onto its chained node', function () {
+    $graph = RunGraph::fromDurable([
+        'summary' => ['swarm_class' => 'App\\Swarms\\Digest', 'status' => 'completed'],
+        'branches' => [],
+        'children' => [],
+        'node_outputs' => [
+            ['node_id' => 'step:0', 'output' => 'sw0:sealed-leaf', 'output_available' => true],
+        ],
+    ]);
+
+    // A bare still-sealed scalar degrades wholesale to the marker (never raw sw0:).
+    $byId = collect($graph['nodes'])->keyBy('id');
+    expect($byId['node:step:0']['detail_output'])->toBe('unavailable')
+        ->and($byId['node:step:0']['detail_output'])->not->toContain('sw0:');
+});
+
+test('every builder emits the same detail SHAPE so the click-through is uniform', function () {
+    $keys = ['summary', 'tokens', 'detail_input', 'detail_output', 'detail_duration', 'detail_attempts', 'detail_wrote', 'detail_memory', 'detail_tools'];
+
+    $run = RunGraph::fromRun(['status' => 'completed', 'steps' => [['step_index' => 0, 'agent_class' => 'X', 'output' => 'y']]]);
+    $plan = RunGraph::fromRoutePlan(['nodes' => ['a' => ['type' => 'worker', 'agent' => 'App\\A']]]);
+    $durable = RunGraph::fromDurable([
+        'summary' => ['swarm_class' => 'App\\S', 'status' => 'completed'],
+        'branches' => [['node_id' => 'a', 'parent_node_id' => null, 'agent_class' => 'App\\A', 'status' => 'completed', 'step_index' => 0, 'input' => 'i', 'input_available' => true, 'output' => 'o', 'output_available' => true]],
+        'children' => [], 'node_outputs' => [],
+    ]);
+
+    foreach ([$run, $plan, $durable] as $graph) {
+        foreach ($graph['nodes'] as $node) {
+            expect($node)->toHaveKeys($keys);
+        }
+    }
+});
+
+test('fromRoutePlan grafts a durable branch onto its authored worker node (node_id match)', function () {
+    $graph = RunGraph::fromRoutePlan(
+        ['start_at' => 'gather', 'nodes' => [
+            'gather' => ['type' => 'parallel', 'branches' => ['changes'], 'next' => 'write'],
+            'changes' => ['type' => 'worker', 'agent' => 'App\\Agents\\ChangeScanner'],
+            'write' => ['type' => 'worker', 'agent' => 'App\\Agents\\NotesWriter', 'next' => 'finish'],
+            'finish' => ['type' => 'finish'],
+        ]],
+        ['gather', 'changes'],
+        'running',
+        // durable branch rows carry the real execution I/O for the plan nodes
+        [['node_id' => 'changes', 'agent_class' => 'App\\Agents\\ChangeScanner', 'status' => 'completed',
+            'step_index' => 0, 'input' => 'the diff', 'input_available' => true,
+            'output' => 'listed 3 changes', 'output_available' => true,
+            'usage' => ['prompt_tokens' => 60, 'completion_tokens' => 20], 'duration_ms' => 1500]],
+        [0 => ['wrote' => ['changes'], 'entries' => [], 'tools' => []]],
+    );
+
+    $byId = collect($graph['nodes'])->keyBy('id');
+    // the worker node is grafted with its branch's sealed-rendered detail
+    expect($byId['plan:changes']['detail_input'])->toBe('the diff')
+        ->and($byId['plan:changes']['detail_output'])->toBe('listed 3 changes')
+        ->and($byId['plan:changes']['tokens'])->toBe(80)
+        ->and($byId['plan:changes']['detail_duration'])->toBe('1.5s')
+        ->and($byId['plan:changes']['detail_wrote'])->toBe(['changes'])
+        // structural nodes (no branch) keep the empty detail shape
+        ->and($byId['plan:gather']['detail_input'])->toBeNull()
+        ->and($byId['plan:finish']['detail_output'])->toBeNull();
+});
+
+// --- ViewSwarmRun::selectFlow: the flow-source precedence -----------------
+// The precedence decision extracted from resolveFlow so it is testable below the
+// container/Livewire render layer (Filament v5 + Testbench harness is unreliable).
+
+test('selectFlow prefers the authored route plan when the durable run carries one', function () {
+    $flow = ViewSwarmRun::selectFlow(
+        ['route_plan' => ['nodes' => ['a' => ['type' => 'worker', 'agent' => 'App\\A', 'next' => 'b'], 'b' => ['type' => 'worker', 'agent' => 'App\\B']]], 'completed_node_ids' => ['a'], 'status' => 'running'],
+        [], [], [],
+        ['status' => 'x', 'steps' => [['step_index' => 0, 'agent_class' => 'App\\ShouldNotAppear']]],
+        [],
+    );
+
+    // route-plan ids are plan:*, proving fromRoutePlan won over fromRun/fromDurable
+    expect(array_column($flow['nodes'], 'id'))->toContain('plan:a')
+        ->and(array_column($flow['nodes'], 'id'))->not->toContain('step-0');
+});
+
+test('selectFlow uses the durable DAG when there is no plan but branch/child data exists', function () {
+    $flow = ViewSwarmRun::selectFlow(
+        ['swarm_class' => 'App\\Swarms\\Triage', 'status' => 'completed'],
+        [['node_id' => 'billing', 'parent_node_id' => null, 'agent_class' => 'App\\Agents\\Billing', 'status' => 'completed', 'step_index' => 0, 'input' => 'i', 'input_available' => true, 'output' => 'o', 'output_available' => true]],
+        [], [],
+        ['status' => 'x', 'steps' => [['step_index' => 0, 'agent_class' => 'App\\ShouldNotAppear']]],
+        [],
+    );
+
+    // durable ids are run/node:*, proving fromDurable won over fromRun
+    expect(array_column($flow['nodes'], 'id'))->toContain('run')
+        ->and(array_column($flow['nodes'], 'id'))->toContain('node:billing')
+        ->and(array_column($flow['nodes'], 'id'))->not->toContain('step-0');
+});
+
+test('selectFlow falls back to run history when the durable run has neither plan nor branch/child data', function () {
+    $flow = ViewSwarmRun::selectFlow(
+        ['status' => 'completed'],
+        [], [], [],
+        ['status' => 'completed', 'steps' => [['step_index' => 0, 'agent_class' => 'App\\Agents\\Solo']]],
+        [],
+    );
+
+    expect(array_column($flow['nodes'], 'id'))->toBe(['step-0']);
 });
 
 // --- Enriched flow annotations (role / decision / tokens / summary) -------

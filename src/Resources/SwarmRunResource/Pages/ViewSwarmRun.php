@@ -81,14 +81,21 @@ final class ViewSwarmRun extends ViewRecord
     }
 
     /**
-     * Resolve the workflow flow for a run, preferring the TRUE authored DAG.
+     * Resolve the workflow flow for a run, in precedence order (richest first):
      *
-     * A durable (static-)hierarchical run persists its declared `route_plan`, whose
-     * edges capture the real topology — parallel fan-out, joins, finish — that a
-     * flat run-history step list cannot ({@see RunGraph::fromRoutePlan()}). For any
-     * other run (non-durable, or durable without a plan), and whenever durable
-     * inspection is unbound or fails, fall back to the topology-derived flow over
-     * run history ({@see RunGraph::fromRun()}).
+     * 1. **durable + route_plan** → {@see RunGraph::fromRoutePlan()}: the TRUE
+     *    authored DAG (parallel fan-out, joins, finish) a flat step list cannot
+     *    show, with each worker grafted with its durable branch execution I/O.
+     * 2. **durable + branches / children / node_outputs** (no plan) →
+     *    {@see RunGraph::fromDurable()}: the recorded execution DAG — the
+     *    branch/child-run tree the old nested tables hid — with per-node detail.
+     * 3. otherwise, or whenever durable inspection is unbound / fails →
+     *    {@see RunGraph::fromRun()}: the topology-derived flow over run history.
+     *
+     * The durable branch/child/node-output rows carry display-decrypted payloads;
+     * every per-node input/output grafted from them is routed through the sealed
+     * chokepoint inside RunGraph ({@see RunDisplayPresenter::renderField()}), never
+     * rendered raw.
      *
      * @param  array<string, mixed>  $data  the display record
      * @param  array<int, array<string, mixed>>  $facets
@@ -100,19 +107,60 @@ final class ViewSwarmRun extends ViewRecord
             $durable = app(InspectsDurableRuns::class);
 
             if ($durable->find($runId) !== null) {
-                $run = $durable->inspect($runId)->run ?? [];
-                $plan = $run['route_plan'] ?? null;
-                $plan = is_string($plan) ? json_decode($plan, true) : $plan;
+                $detail = $durable->inspect($runId);
 
-                if (is_array($plan) && is_array($plan['nodes'] ?? null) && $plan['nodes'] !== []) {
-                    $completed = is_array($run['completed_node_ids'] ?? null) ? array_values(array_filter($run['completed_node_ids'], 'is_string')) : [];
-                    $status = is_string($run['status'] ?? null) ? $run['status'] : null;
-
-                    return RunGraph::fromRoutePlan($plan, $completed, $status);
-                }
+                return self::selectFlow(
+                    is_array($detail->run) ? $detail->run : [],
+                    $detail->branches,
+                    $detail->children,
+                    $detail->hierarchicalNodeOutputs,
+                    $data,
+                    $facets,
+                );
             }
         } catch (\Throwable) {
             // Durable inspection unavailable or failed — fall back to run history.
+        }
+
+        return RunGraph::fromRun($data, $facets);
+    }
+
+    /**
+     * The pure precedence decision extracted from {@see resolveFlow()} so it is
+     * testable below the container/Livewire layer: given a durable run row plus its
+     * branch/child/node-output detail, pick the richest builder (see the ordered
+     * list on {@see resolveFlow()}). The durable rows are display-decrypted; every
+     * per-node payload is sealed-rendered inside {@see RunGraph}.
+     *
+     * @param  array<string, mixed>  $run  the durable run row
+     * @param  array<int, array<string, mixed>>  $branches
+     * @param  array<int, array<string, mixed>>  $children
+     * @param  array<int, array<string, mixed>>  $nodeOutputs
+     * @param  array<string, mixed>  $data  the run-history display record
+     * @param  array<int, array<string, mixed>>  $facets
+     * @return array{nodes: list<array<string, mixed>>, edges: list<array<string, mixed>>}
+     */
+    public static function selectFlow(array $run, array $branches, array $children, array $nodeOutputs, array $data, array $facets): array
+    {
+        $plan = $run['route_plan'] ?? null;
+        $plan = is_string($plan) ? json_decode($plan, true) : $plan;
+
+        if (is_array($plan) && is_array($plan['nodes'] ?? null) && $plan['nodes'] !== []) {
+            $completed = is_array($run['completed_node_ids'] ?? null) ? array_values(array_filter($run['completed_node_ids'], 'is_string')) : [];
+            $status = is_string($run['status'] ?? null) ? $run['status'] : null;
+
+            return RunGraph::fromRoutePlan($plan, $completed, $status, $branches, $facets);
+        }
+
+        // No authored plan, but the durable branch/child DAG exists — render it
+        // (with per-node detail) rather than collapsing to a flat run-history chain.
+        if ($branches !== [] || $children !== [] || $nodeOutputs !== []) {
+            return RunGraph::fromDurable([
+                'summary' => $run,
+                'branches' => $branches,
+                'children' => $children,
+                'node_outputs' => $nodeOutputs,
+            ], $facets);
         }
 
         return RunGraph::fromRun($data, $facets);

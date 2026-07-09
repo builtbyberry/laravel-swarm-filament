@@ -255,6 +255,24 @@ final class RunDisplayPresenter
     }
 
     /**
+     * The public face of the sealed chokepoint: render any display-contract
+     * `<field>` / `<field>_available` pair to a safe three-state string.
+     *
+     * {@see RunGraph::fromDurable()} / {@see RunGraph::fromRoutePlan()} graft
+     * per-node input/output straight off the durable branch/child/node-output
+     * rows (which carry decrypted payloads plus their `*_available` flags), and
+     * MUST route every such field through here so a branch's decrypted value —
+     * or a nested `sw0:` leaf — degrades exactly as it does for the run/step
+     * infolist, never rendering raw. This is the single companion sealed path.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    public static function renderField(array $row, string $field): string
+    {
+        return self::sealed($row, $field);
+    }
+
+    /**
      * Render a flat `<field>` / `<field>_available` sealed pair; the three-state
      * mapping (and the ciphertext-escape guarantee) lives in {@see render()}.
      *
