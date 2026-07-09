@@ -70,22 +70,26 @@ authorization cannot drift surface-to-surface.
 
 ## Surfaces
 
-All read-only, all grouped under the configured navigation group (default `Swarm`):
+The information architecture is run-centric: the run is the hero object, so the
+navigation has just two destinations, both read-only and grouped under the
+configured navigation group (default `Swarm`):
 
-- **Runs explorer** — a filterable/sortable index of swarm runs with a per-run
-  detail view (status, topology, context, output, and the step timeline).
-- **Durable run inspector** — the full durable execution record: lifecycle
-  markers, parallel branches, child runs, hierarchical node outputs, waits,
-  signals, progress, and history.
-- **Memory viewer** — agent memory snapshots (policy-filtered at freeze time),
-  with redacted values shown as a clear marker.
-- **Streaming / causal-log viewer** — a per-run, per-node timeline of the
-  append-only causal log, with void-edge markers.
-- **Health dashboard** — a pass/fail readiness view of the durable and audit
-  persistence lanes (a page plus a companion widget).
-- **Audit surfaces** — a non-consuming outbox health dashboard (coexists with
-  the `swarm:relay` drainer), a single-row payload detail, and the per-run audit
-  trace.
+- **Runs** — a filterable/sortable index of swarm runs with a per-run detail
+  view. The detail view tells the whole story of one run: status, topology,
+  context, output, and the step timeline, with durable execution, memory,
+  streaming, and audit folded in as facets of that run rather than separate
+  destinations:
+  - **Durable execution** — lifecycle markers, parallel branches, child runs,
+    hierarchical node outputs, waits, signals, progress, and run history.
+  - **Memory** — agent memory snapshots (policy-filtered at freeze time), with
+    redacted values shown as a clear marker.
+  - **Streaming** — the per-node timeline of the append-only causal log, with
+    void-edge markers.
+  - **Audit** — the per-run audit trace, plus payload detail decrypted on demand
+    (with a clean empty-state when no readable audit sink is bound).
+- **Health** — a pass/fail/degraded readiness view of the durable and audit
+  persistence lanes (a page plus a companion widget), including a non-consuming
+  outbox health check that coexists with the `swarm:relay` drainer.
 
 Sealed payloads are display-decrypted per field by laravel-swarm core; an
 undecryptable value renders as `unavailable`, never as `sw0:` ciphertext.

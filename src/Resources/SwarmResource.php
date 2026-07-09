@@ -9,8 +9,12 @@ use BuiltByBerry\LaravelSwarmFilament\Concerns\ResolvesSwarmNavigation;
 use Filament\Resources\Resource;
 
 /**
- * Base class for the read-only observability resources (runs, durable inspector,
- * memory, streaming, audit).
+ * Base class for the read-only observability resources.
+ *
+ * Under the run-centric IA the concrete resource is the runs explorer
+ * ({@see SwarmRunResource}); durable execution, memory, streaming, and audit are
+ * folded into a run as facets rather than standalone resources. This stays an
+ * abstract base so the shared seam holds if further resources are ever added.
  *
  * Applies the deny-by-default {@see AuthorizesSwarmObservability} gate so every
  * observability resource is authorized uniformly against the configured

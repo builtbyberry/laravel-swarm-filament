@@ -33,7 +33,7 @@ final class RunDisplayPresenter
 
     /**
      * @param  array<string, mixed>  $display  a `findForDisplay()` row
-     * @return array{run_id: ?string, swarm_class: ?string, topology: ?string, status: ?string, started_at: mixed, finished_at: mixed, context: string, output: string, steps: list<array{step_index: ?int, agent_class: ?string, input: string, output: string}>}
+     * @return array{run_id: ?string, swarm_class: ?string, topology: ?string, status: ?string, started_at: mixed, finished_at: mixed, context: string, output: string, steps: list<array{step_index: ?int, agent_class: ?string, role: ?string, decision: ?string, tokens: ?int, input: string, output: string}>, metrics: array{steps: int, tokens: ?int, duration: ?string}}
      */
     public static function present(array $display): array
     {
@@ -121,7 +121,7 @@ final class RunDisplayPresenter
     }
 
     /**
-     * @return list<array{step_index: ?int, agent_class: ?string, input: string, output: string}>
+     * @return list<array{step_index: ?int, agent_class: ?string, role: ?string, decision: ?string, tokens: ?int, input: string, output: string}>
      */
     private static function steps(mixed $steps): array
     {

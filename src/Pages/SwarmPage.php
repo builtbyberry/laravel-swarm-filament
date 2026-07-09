@@ -12,11 +12,15 @@ use Filament\Pages\Concerns\CanAuthorizeAccess;
 use Filament\Pages\Page;
 
 /**
- * Base class for the read-only observability **Pages** (health dashboard, audit
- * surfaces, streaming viewer).
+ * Base class for the read-only observability **Pages** — the global Health
+ * dashboard ({@see SwarmHealthPage}).
+ *
+ * Under the run-centric IA, streaming and audit are facets of a run rather than
+ * standalone pages, so Health is the only page today; this stays an abstract base
+ * so the shared authorization seam holds if further pages are ever added.
  *
  * The parallel of {@see SwarmResource}
- * for standalone pages. A Filament {@see Page} authorizes through
+ * for pages. A Filament {@see Page} authorizes through
  * `canAccess(): bool` (the {@see CanAuthorizeAccess}
  * signature — no `$parameters`, unlike a *resource* page), so it cannot share the
  * Resource's {@see AuthorizesSwarmObservability}
