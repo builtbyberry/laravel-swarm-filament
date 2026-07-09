@@ -5,6 +5,7 @@ declare(strict_types=1);
 use BuiltByBerry\LaravelSwarmFilament\Support\RunDisplayPresenter;
 use BuiltByBerry\LaravelSwarmFilament\Support\RunGraph;
 use BuiltByBerry\LaravelSwarmFilament\Support\WorkflowGraphPresenter;
+use Illuminate\Support\Js;
 
 /*
  * Workflow graph views — the pure layout engine (WorkflowGraphPresenter) and the
@@ -361,7 +362,7 @@ test('Blade @js hex-escapes a crafted id so it cannot break out of the Alpine JS
     // The encoder @js expands to — proving the mechanism the partial now relies on.
     // An id engineered to close the string and run an expression if left unescaped:
     //   sel === 'evil'-alert(1)-'x'  →  string, then -alert(1)-, then string.
-    $encoded = \Illuminate\Support\Js::from("evil'-alert(1)-'x")->toHtml();
+    $encoded = Js::from("evil'-alert(1)-'x")->toHtml();
 
     // Every apostrophe is hex-escaped ('), so it can never close the literal;
     // the raw breakout form is therefore absent.
