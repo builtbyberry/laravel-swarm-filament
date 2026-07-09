@@ -9,6 +9,7 @@ use BuiltByBerry\LaravelSwarm\Contracts\ReadableRunHistoryStore;
 use BuiltByBerry\LaravelSwarmFilament\Models\SwarmRun;
 use BuiltByBerry\LaravelSwarmFilament\Resources\SwarmRunResource\Pages;
 use BuiltByBerry\LaravelSwarmFilament\Support\RunDisplayPresenter;
+use BuiltByBerry\LaravelSwarmFilament\Support\RunSummaryMemo;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Tables\Columns\TextColumn;
@@ -36,14 +37,6 @@ final class SwarmRunResource extends SwarmResource
     protected static ?string $model = SwarmRun::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-rectangle-stack';
-
-    /**
-     * Per-request memo of run-id → summary, so the index resolves each visible
-     * row's display record at most once.
-     *
-     * @var array<string, ?string>
-     */
-    private static array $summaryCache = [];
 
     public static function getModelLabel(): string
     {
@@ -110,20 +103,18 @@ final class SwarmRunResource extends SwarmResource
      */
     public static function runSummary(string $runId): ?string
     {
-        if (array_key_exists($runId, self::$summaryCache)) {
-            return self::$summaryCache[$runId];
-        }
+        return app(RunSummaryMemo::class)->remember($runId, static function () use ($runId): ?string {
+            $display = app(ReadableRunHistoryStore::class)->findForDisplay($runId);
 
-        $display = app(ReadableRunHistoryStore::class)->findForDisplay($runId);
-        $summary = null;
+            if ($display === null) {
+                return null;
+            }
 
-        if ($display !== null) {
             $presented = RunDisplayPresenter::present($display);
-            // Prefer the request (the run's intent); fall back to the output gist.
-            $summary = self::gist($presented['context'] ?? null) ?? self::gist($presented['output'] ?? null);
-        }
 
-        return self::$summaryCache[$runId] = $summary;
+            // Prefer the request (the run's intent); fall back to the output gist.
+            return self::gist($presented['context'] ?? null) ?? self::gist($presented['output'] ?? null);
+        });
     }
 
     /**
