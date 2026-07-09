@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace BuiltByBerry\LaravelSwarmFilament\Support;
 
-use BuiltByBerry\LaravelSwarmFilament\Concerns\AuthorizesSwarmObservability;
 use Illuminate\Support\Facades\Gate;
 
 /**
@@ -24,10 +23,10 @@ use Illuminate\Support\Facades\Gate;
  * This is an explicit opt-out; the shipped default ability is a non-empty string,
  * which keeps the surfaces deny-by-default.
  *
- * Resources apply {@see AuthorizesSwarmObservability},
- * which delegates here; pages and widgets (whose Filament authorization hooks have
- * different signatures) call {@see allows()} directly from their own `canAccess()`
- * / `canView()`.
+ * Every surface applies this decision in its own Filament authorization hooks —
+ * resources, pages, and widgets each call {@see allows()} directly from their
+ * `canAccess()` / `canViewAny()` / `canView()` (their Filament authorization
+ * signatures differ, so the decision lives here once and the hooks delegate to it).
  */
 final class SwarmObservabilityGate
 {

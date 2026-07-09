@@ -8,8 +8,17 @@ on:
 
 jobs:
   tests:
-    name: PHP 8.5 - Laravel 13
+    name: PHP 8.5 - Laravel 13 - ${{ matrix.dependency-version }}
     runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dependency-version: prefer-stable
+            composer-flags: '--prefer-stable'
+          - dependency-version: prefer-lowest
+            composer-flags: '--prefer-lowest --prefer-stable'
 
     steps:
       - name: Checkout code
@@ -23,13 +32,15 @@ jobs:
           ini-values: memory_limit=1G
 
       - name: Install dependencies
-        run: composer update --prefer-stable --prefer-dist --no-interaction --no-progress
+        run: composer update ${{ matrix.composer-flags }} --prefer-dist --no-interaction --no-progress
 
       - name: Execute tests
         run: composer test
 
       - name: Execute static analysis
+        if: matrix.dependency-version == 'prefer-stable'
         run: composer analyse
 
       - name: Execute code style check
+        if: matrix.dependency-version == 'prefer-stable'
         run: composer lint
