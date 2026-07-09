@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace BuiltByBerry\LaravelSwarmFilament\Support;
 
+use BuiltByBerry\LaravelSwarm\Persistence\DatabaseDurableRunStore;
 use Illuminate\Support\Str;
 
 /**
@@ -63,16 +64,20 @@ final class RunGraph
                 // else its role, else the step number.
                 'sublabel' => $decision !== null ? 'via '.$decision : ($role ?? 'step '.$stepIndex),
                 'status' => $runStatus,
-                // What it actually did — the line that makes the flow legible.
-                'summary' => self::summarize($output),
-                'tokens' => is_int($step['tokens'] ?? null) ? $step['tokens'] : null,
                 // Everything about the step, folded into the flow's click-through:
-                // I/O, the memory it wrote/saw, and the tools it called.
-                'detail_input' => self::str($step['input'] ?? null),
-                'detail_output' => $output,
-                'detail_wrote' => is_array($facet['wrote'] ?? null) ? array_values($facet['wrote']) : [],
-                'detail_memory' => is_array($facet['entries'] ?? null) ? array_values($facet['entries']) : [],
-                'detail_tools' => is_array($facet['tools'] ?? null) ? array_values($facet['tools']) : [],
+                // I/O (already sealed-rendered upstream by RunDisplayPresenter), the
+                // memory it wrote/saw, and the tools it called. Run-history steps
+                // carry no per-step duration/attempts, so those stay null here — the
+                // detail SHAPE is kept consistent across every builder regardless.
+                ...self::detail([
+                    'summary' => self::summarize($output),
+                    'tokens' => is_int($step['tokens'] ?? null) ? $step['tokens'] : null,
+                    'detail_input' => self::str($step['input'] ?? null),
+                    'detail_output' => $output,
+                    'detail_wrote' => is_array($facet['wrote'] ?? null) ? array_values($facet['wrote']) : [],
+                    'detail_memory' => is_array($facet['entries'] ?? null) ? array_values($facet['entries']) : [],
+                    'detail_tools' => is_array($facet['tools'] ?? null) ? array_values($facet['tools']) : [],
+                ]),
             ];
             $ids[$i] = $id;
             $roles[$i] = $role;
@@ -166,14 +171,114 @@ final class RunGraph
             'label' => $label,
             'sublabel' => $sublabel,
             'status' => $status,
+            ...self::detail(),
+        ];
+    }
+
+    /**
+     * The canonical per-node click-through detail block, applied uniformly across
+     * every builder ({@see fromRun()}, {@see fromDurable()}, {@see fromRoutePlan()})
+     * so the graph partial renders one consistent shape whatever the source surface.
+     * A builder overrides only the facets it actually has; the rest degrade to
+     * null/empty rather than being absent.
+     *
+     * @param  array<string, mixed>  $overrides
+     * @return array<string, mixed>
+     */
+    private static function detail(array $overrides = []): array
+    {
+        return array_merge([
             'summary' => null,
             'tokens' => null,
             'detail_input' => null,
             'detail_output' => null,
+            'detail_duration' => null,
+            'detail_attempts' => null,
             'detail_wrote' => [],
             'detail_memory' => [],
             'detail_tools' => [],
-        ];
+        ], $overrides);
+    }
+
+    /**
+     * The click-through detail for one display-decrypted durable branch row
+     * ({@see DatabaseDurableRunStore::mapBranchForDisplay()}).
+     *
+     * SEALED INVARIANT: the branch's `input`/`output` are decrypted payloads
+     * carrying `*_available` flags — they are routed through the SINGLE companion
+     * sealed chokepoint ({@see RunDisplayPresenter::renderField()}) so a branch's
+     * value (or a nested `sw0:` leaf) degrades to the same three-state string as
+     * the run/step infolist and never renders raw. Memory facets join by
+     * `step_index` — the same key {@see MemoryFacets::forRun()} snapshots under.
+     *
+     * @param  array<string, mixed>  $branch  a mapBranchForDisplay() row
+     * @param  array<int, array<string, mixed>>  $facets
+     * @return array<string, mixed>
+     */
+    private static function branchDetail(array $branch, array $facets): array
+    {
+        $output = RunDisplayPresenter::renderField($branch, 'output');
+        $stepIndex = is_int($branch['step_index'] ?? null) ? $branch['step_index'] : null;
+        $facet = $stepIndex !== null && isset($facets[$stepIndex]) && is_array($facets[$stepIndex]) ? $facets[$stepIndex] : [];
+        $attempts = is_int($branch['attempts'] ?? null) ? $branch['attempts'] : null;
+
+        return self::detail([
+            'summary' => self::summarize($output),
+            'tokens' => self::usageTokens(is_array($branch['usage'] ?? null) ? $branch['usage'] : []),
+            'detail_input' => RunDisplayPresenter::renderField($branch, 'input'),
+            'detail_output' => $output,
+            'detail_duration' => is_int($branch['duration_ms'] ?? null) ? self::formatDuration($branch['duration_ms']) : null,
+            'detail_attempts' => $attempts !== null && $attempts > 0 ? $attempts : null,
+            'detail_wrote' => is_array($facet['wrote'] ?? null) ? array_values($facet['wrote']) : [],
+            'detail_memory' => is_array($facet['entries'] ?? null) ? array_values($facet['entries']) : [],
+            'detail_tools' => is_array($facet['tools'] ?? null) ? array_values($facet['tools']) : [],
+        ]);
+    }
+
+    /**
+     * A node_id-keyed map of branch detail, so a durable run's authored route plan
+     * ({@see fromRoutePlan()}) can graft each worker's real execution I/O onto its
+     * declared node. Branch `node_id` matches the plan node id.
+     *
+     * @param  array<int, array<string, mixed>>  $facets
+     * @return array<string, array<string, mixed>>
+     */
+    private static function branchDetailMap(mixed $branches, array $facets): array
+    {
+        $map = [];
+        foreach (self::rows($branches) as $branch) {
+            $nodeId = self::str($branch['node_id'] ?? null);
+            if ($nodeId !== null) {
+                $map[$nodeId] = self::branchDetail($branch, $facets);
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * Total prompt+completion tokens from a usage array, or null when there is
+     * nothing to report — mirrors {@see RunDisplayPresenter} so the flow shows
+     * tokens only when real.
+     *
+     * @param  array<string, mixed>  $usage
+     */
+    private static function usageTokens(array $usage): ?int
+    {
+        $prompt = is_numeric($usage['prompt_tokens'] ?? null) ? (int) $usage['prompt_tokens'] : 0;
+        $completion = is_numeric($usage['completion_tokens'] ?? null) ? (int) $usage['completion_tokens'] : 0;
+        $total = $prompt + $completion;
+
+        return $total > 0 ? $total : null;
+    }
+
+    /**
+     * A durable branch's wall-clock as a compact human string (sub-second stays in
+     * ms; a second or more rounds to one decimal).
+     */
+    private static function formatDuration(int $ms): string
+    {
+        return $ms < 1000 ? $ms.'ms' : round($ms / 1000, 1).'s';
     }
 
     /**
@@ -209,14 +314,25 @@ final class RunGraph
      *   before the parallel node's `next` — an edge from each branch to `next`.
      * - **finish**: terminal; `output_from` is data flow, not a control edge.
      *
+     * The authored plan carries only the topology; the real per-node execution I/O
+     * (input, output, tokens, duration, attempts, memory) lives in the durable
+     * branch rows. Pass those `$branches` (display-decrypted mapBranchForDisplay
+     * rows) and the run's memory `$facets` and each worker node is grafted with its
+     * branch detail — routed through the sealed chokepoint by {@see branchDetail()}
+     * — so the authored DAG is also the richest detail surface. Structural nodes
+     * (parallel/finish) have no branch and keep the empty detail shape.
+     *
      * @param  array{start_at?: string, nodes?: array<string, array<string, mixed>>}  $plan
      * @param  list<string>  $completedNodeIds
+     * @param  mixed  $branches  display-decrypted durable branch rows (node_id-carrying)
+     * @param  array<int, array<string, mixed>>  $facets  per-step memory facets ({@see MemoryFacets::forRun()})
      * @return array{nodes: list<array<string, mixed>>, edges: list<array<string, mixed>>}
      */
-    public static function fromRoutePlan(array $plan, array $completedNodeIds = [], ?string $runStatus = null): array
+    public static function fromRoutePlan(array $plan, array $completedNodeIds = [], ?string $runStatus = null, mixed $branches = [], array $facets = []): array
     {
         $planNodes = is_array($plan['nodes'] ?? null) ? $plan['nodes'] : [];
         $completed = array_flip(array_values(array_filter($completedNodeIds, 'is_string')));
+        $detailByNode = self::branchDetailMap($branches, $facets);
 
         $nodes = [];
         $edges = [];
@@ -234,13 +350,9 @@ final class RunGraph
                 // Workers read as their node id; structural nodes name their type.
                 'sublabel' => $type === 'worker' ? $nodeId : $type,
                 'status' => isset($completed[$nodeId]) ? 'completed' : $runStatus,
-                'summary' => null,
-                'tokens' => null,
-                'detail_input' => null,
-                'detail_output' => null,
-                'detail_wrote' => [],
-                'detail_memory' => [],
-                'detail_tools' => [],
+                // The worker's real branch execution detail when it ran; otherwise
+                // the empty detail shape (structural nodes, or a node not yet run).
+                ...($detailByNode[$nodeId] ?? self::detail()),
             ];
 
             if ($type === 'parallel') {
@@ -271,16 +383,22 @@ final class RunGraph
      * chained in recorded order, and spawned child runs hung off the root. This is
      * the richest workflow shape — the tree-of-nodes the old nested tables hid.
      *
+     * Every per-node input/output grafted here is display-decrypted durable data,
+     * so it is routed through the sealed chokepoint ({@see branchDetail()} /
+     * {@see RunDisplayPresenter::renderField()}) — a branch/child/node-output value
+     * (or a nested `sw0:` leaf) never renders raw. Memory facets join by step_index.
+     *
      * @param  array<string, mixed>  $presented  a durable-run display record (summary + branches + children + node_outputs)
+     * @param  array<int, array<string, mixed>>  $facets  per-step memory facets ({@see MemoryFacets::forRun()})
      * @return array{nodes: list<array<string, mixed>>, edges: list<array<string, mixed>>}
      */
-    public static function fromDurable(array $presented): array
+    public static function fromDurable(array $presented, array $facets = []): array
     {
         $summary = is_array($presented['summary'] ?? null) ? $presented['summary'] : [];
         $rootStatus = self::firstString($summary, ['status']);
         $rootLabel = self::firstString($summary, ['swarm_class', 'swarm', 'topology']) ?? 'run';
 
-        $nodes = [['id' => 'run', 'label' => class_basename($rootLabel), 'sublabel' => 'run', 'status' => $rootStatus]];
+        $nodes = [['id' => 'run', 'label' => class_basename($rootLabel), 'sublabel' => 'run', 'status' => $rootStatus, ...self::detail()]];
         $edges = [];
         $branchNodeIds = [];
 
@@ -296,20 +414,31 @@ final class RunGraph
                 'label' => $agent !== null ? class_basename($agent) : $nodeId,
                 'sublabel' => $nodeId,
                 'status' => self::str($b['status'] ?? null),
+                // The branch's real execution I/O, sealed-rendered — the per-node
+                // fields the old nested tables carried but this DAG used to drop.
+                ...self::branchDetail($b, $facets),
             ];
             $parent = self::str($b['parent_node_id'] ?? null);
             $edges[] = ['from' => $parent !== null ? 'node:'.$parent : 'run', 'to' => 'node:'.$nodeId, 'kind' => 'branch'];
         }
 
         // Node outputs not represented by a branch — chain them in recorded order so
-        // a sequential durable run reads as a flow rather than a star.
+        // a sequential durable run reads as a flow rather than a star. The stored
+        // output is display-decrypted; render it through the sealed chokepoint.
         $prevOutput = 'run';
         foreach (self::rows($presented['node_outputs'] ?? null) as $o) {
             $nodeId = self::str($o['node_id'] ?? null);
             if ($nodeId === null || isset($branchNodeIds[$nodeId])) {
                 continue;
             }
-            $nodes[] = ['id' => 'node:'.$nodeId, 'label' => $nodeId, 'sublabel' => 'node', 'status' => null];
+            $output = RunDisplayPresenter::renderField($o, 'output');
+            $nodes[] = [
+                'id' => 'node:'.$nodeId,
+                'label' => $nodeId,
+                'sublabel' => 'node',
+                'status' => null,
+                ...self::detail(['summary' => self::summarize($output), 'detail_output' => $output]),
+            ];
             $edges[] = ['from' => $prevOutput, 'to' => 'node:'.$nodeId, 'kind' => 'node'];
             $prevOutput = 'node:'.$nodeId;
         }
@@ -320,11 +449,19 @@ final class RunGraph
                 continue;
             }
             $swarm = self::str($c['child_swarm_class'] ?? null);
+            // A spawned child run surfaces as a node; its context (input) and output
+            // are display-decrypted, so both go through the sealed chokepoint.
+            $childOutput = RunDisplayPresenter::renderField($c, 'output');
             $nodes[] = [
                 'id' => 'child:'.$childId,
                 'label' => $swarm !== null ? class_basename($swarm) : 'child',
                 'sublabel' => 'child run',
                 'status' => self::str($c['status'] ?? null),
+                ...self::detail([
+                    'summary' => self::summarize($childOutput),
+                    'detail_input' => RunDisplayPresenter::renderField($c, 'context_payload'),
+                    'detail_output' => $childOutput,
+                ]),
             ];
             $edges[] = ['from' => 'run', 'to' => 'child:'.$childId, 'kind' => 'child'];
         }

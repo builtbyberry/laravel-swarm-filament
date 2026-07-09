@@ -16,6 +16,8 @@
             'sublabel' => $n['sublabel'] ?? null,
             'input' => $n['detail_input'] ?? null,
             'output' => $n['detail_output'] ?? null,
+            'duration' => $n['detail_duration'] ?? null,
+            'attempts' => $n['detail_attempts'] ?? null,
             'wrote' => $n['detail_wrote'] ?? [],
             'memory' => $n['detail_memory'] ?? [],
             'tools' => $n['detail_tools'] ?? [],
@@ -72,6 +74,10 @@
             <template x-if="sel && details[sel]">
                 <div>
                     <div class="swarm-graph__detail-head"><span x-text="details[sel].label"></span> <span class="swarm-graph__detail-sub" x-text="details[sel].sublabel"></span></div>
+                    <div class="swarm-graph__metaline" x-show="details[sel].duration || details[sel].attempts">
+                        <span x-show="details[sel].duration">ran in <b x-text="details[sel].duration"></b></span>
+                        <span x-show="details[sel].attempts" x-text="details[sel].attempts + (details[sel].attempts === 1 ? ' attempt' : ' attempts')"></span>
+                    </div>
                     <div class="swarm-graph__io"><div class="swarm-graph__io-label">Input</div><pre x-text="details[sel].input || '—'"></pre></div>
                     <div class="swarm-graph__io"><div class="swarm-graph__io-label">Output</div><pre x-text="details[sel].output || '—'"></pre></div>
                     <div class="swarm-graph__facets" x-show="details[sel].wrote.length || details[sel].tools.length || details[sel].memory.length">
@@ -110,6 +116,9 @@
     .swarm-graph__detail { margin-top: .5rem; border-top: 1px solid rgb(226 232 240); padding-top: .75rem; }
     .swarm-graph__detail-head { font: 600 13px ui-sans-serif, system-ui, sans-serif; color: rgb(15 23 42); margin-bottom: .5rem; }
     .swarm-graph__detail-sub { color: rgb(37 99 235); font-weight: 600; font-size: 11px; }
+    .swarm-graph__metaline { display: flex; gap: 14px; margin-bottom: .5rem; font: 500 11.5px ui-sans-serif, system-ui, sans-serif; color: rgb(100 116 139); }
+    .swarm-graph__metaline b { color: rgb(30 41 59); font-weight: 650; }
+    .dark .swarm-graph__metaline b { color: rgb(226 232 240); }
     .swarm-graph__io { margin-bottom: .5rem; }
     .swarm-graph__io-label { font: 600 11px ui-sans-serif, system-ui, sans-serif; color: rgb(100 116 139); text-transform: uppercase; letter-spacing: .05em; margin-bottom: .15rem; }
     .swarm-graph__io pre { white-space: pre-wrap; word-break: break-word; font: 400 12px ui-monospace, monospace; color: rgb(30 41 59); background: rgb(248 250 252); border: 1px solid rgb(226 232 240); border-radius: 8px; padding: .5rem .625rem; margin: 0; max-height: 16rem; overflow: auto; }
