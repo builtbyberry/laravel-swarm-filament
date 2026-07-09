@@ -106,6 +106,39 @@ test('the presenter masks a value that still looks like sw0: ciphertext even if 
     expect($presented['output'])->toBe('unavailable');
 });
 
+test('the presenter masks a nested sealed leaf in a structured context input, never leaking ciphertext', function () {
+    // Core stores structured context input as plaintext, so a nested sw0: leaf is
+    // reachable; it json-encodes past a top-level prefix check unless masked first.
+    $presented = RunDisplayPresenter::present([
+        'context' => ['input' => ['q' => 'sw0:sealed', 'lang' => 'en']], 'context_available' => true,
+        'output' => null, 'output_available' => true,
+        'steps' => [],
+    ]);
+
+    expect($presented['context'])->toBe('{"q":"unavailable","lang":"en"}')
+        ->and($presented['context'])->not->toContain('sw0:');
+});
+
+test('the runs-list gist never emits sw0: from a nested-sealed context input', function () {
+    // The list path: SwarmRunResource::gist → runSummary → present → context.
+    // A structured context input hiding a sealed leaf must not surface in the gist.
+    $runId = 'gist-nested-sealed-'.uniqid();
+
+    app()->instance(ReadableRunHistoryStore::class, runsExplorerStore([
+        'run_id' => $runId, 'swarm_class' => 'App\\Swarms\\Demo', 'topology' => 'sequential', 'status' => 'completed',
+        'context' => ['input' => ['q' => 'sw0:sealed-request', 'note' => 'find the answer']], 'context_available' => true,
+        'output' => null, 'output_available' => true,
+        'steps' => [],
+    ]));
+
+    $summary = SwarmRunResource::runSummary($runId);
+
+    expect($summary)->not->toBeNull()
+        ->and($summary)->not->toContain('sw0:')
+        ->and($summary)->toContain('unavailable')
+        ->and($summary)->toContain('find the answer');
+});
+
 test('the presenter maps the step timeline and degrades per step field', function () {
     $presented = RunDisplayPresenter::present([
         'steps' => [
