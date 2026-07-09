@@ -168,6 +168,52 @@ test('a static_hierarchical run falls back to an honest execution-order chain', 
         ->and($graph['edges'][0])->toMatchArray(['from' => 'step-0', 'to' => 'step-1', 'kind' => 'sequence']);
 });
 
+// --- RunGraph::fromRoutePlan: the authored DAG (durable hierarchical) ------
+
+test('a route plan renders the true fan-out/join diamond with status overlay', function () {
+    $graph = RunGraph::fromRoutePlan([
+        'start_at' => 'gather',
+        'nodes' => [
+            'gather' => ['type' => 'parallel', 'branches' => ['changes', 'risks'], 'next' => 'write'],
+            'changes' => ['type' => 'worker', 'agent' => 'App\\Agents\\ChangeScanner'],
+            'risks' => ['type' => 'worker', 'agent' => 'App\\Agents\\RiskScanner'],
+            'write' => ['type' => 'worker', 'agent' => 'App\\Agents\\NotesWriter', 'with_outputs' => ['changes' => 'changes', 'risks' => 'risks'], 'next' => 'finish'],
+            'finish' => ['type' => 'finish', 'output_from' => 'write'],
+        ],
+    ], ['gather', 'changes', 'risks', 'write'], 'completed');
+
+    $byId = collect($graph['nodes'])->keyBy('id');
+    // structural + worker labels
+    expect($byId['plan:gather']['label'])->toBe('Gather')
+        ->and($byId['plan:gather']['sublabel'])->toBe('parallel')
+        ->and($byId['plan:changes']['label'])->toBe('ChangeScanner')
+        ->and($byId['plan:write']['label'])->toBe('NotesWriter')
+        ->and($byId['plan:finish']['label'])->toBe('Finish')
+        // status overlaid from completed_node_ids; finish (absent) inherits run status
+        ->and($byId['plan:changes']['status'])->toBe('completed')
+        ->and($byId['plan:finish']['status'])->toBe('completed');
+
+    // the diamond: gather fans out to both branches, both rejoin at write, then finish
+    expect($graph['edges'])->toContainEqual(['from' => 'plan:gather', 'to' => 'plan:changes', 'kind' => 'branch'])
+        ->and($graph['edges'])->toContainEqual(['from' => 'plan:gather', 'to' => 'plan:risks', 'kind' => 'branch'])
+        ->and($graph['edges'])->toContainEqual(['from' => 'plan:changes', 'to' => 'plan:write', 'kind' => 'join'])
+        ->and($graph['edges'])->toContainEqual(['from' => 'plan:risks', 'to' => 'plan:write', 'kind' => 'join'])
+        ->and($graph['edges'])->toContainEqual(['from' => 'plan:write', 'to' => 'plan:finish', 'kind' => 'sequence']);
+});
+
+test('a route plan overlays incomplete nodes with the run status', function () {
+    $graph = RunGraph::fromRoutePlan([
+        'nodes' => [
+            'a' => ['type' => 'worker', 'agent' => 'App\\Agents\\A', 'next' => 'b'],
+            'b' => ['type' => 'worker', 'agent' => 'App\\Agents\\B'],
+        ],
+    ], ['a'], 'running');
+
+    $byId = collect($graph['nodes'])->keyBy('id');
+    expect($byId['plan:a']['status'])->toBe('completed')   // in completed_node_ids
+        ->and($byId['plan:b']['status'])->toBe('running');  // inherits the live run status
+});
+
 // --- RunGraph::fromDurable: DurableRunDetail → the DAG ---------------------
 
 test('the durable DAG wires branches by parent, plus a root and child runs', function () {

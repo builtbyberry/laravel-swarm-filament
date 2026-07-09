@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace BuiltByBerry\LaravelSwarmFilament\Resources\SwarmRunResource\Pages;
 
+use BuiltByBerry\LaravelSwarm\Contracts\InspectsDurableRuns;
 use BuiltByBerry\LaravelSwarm\Contracts\ReadableRunHistoryStore;
 use BuiltByBerry\LaravelSwarm\Contracts\SnapshotsMemory;
 use BuiltByBerry\LaravelSwarm\Contracts\StreamEventStore;
@@ -80,6 +81,44 @@ final class ViewSwarmRun extends ViewRecord
         return RunDisplayPresenter::present($display);
     }
 
+    /**
+     * Resolve the workflow flow for a run, preferring the TRUE authored DAG.
+     *
+     * A durable (static-)hierarchical run persists its declared `route_plan`, whose
+     * edges capture the real topology — parallel fan-out, joins, finish — that a
+     * flat run-history step list cannot ({@see RunGraph::fromRoutePlan()}). For any
+     * other run (non-durable, or durable without a plan), and whenever durable
+     * inspection is unbound or fails, fall back to the topology-derived flow over
+     * run history ({@see RunGraph::fromRun()}).
+     *
+     * @param  array<string, mixed>  $data  the display record
+     * @param  array<int, array<string, mixed>>  $facets
+     * @return array{nodes: list<array<string, mixed>>, edges: list<array<string, mixed>>}
+     */
+    private static function resolveFlow(string $runId, array $data, array $facets): array
+    {
+        try {
+            $durable = app(InspectsDurableRuns::class);
+
+            if ($durable->find($runId) !== null) {
+                $run = $durable->inspect($runId)->run ?? [];
+                $plan = $run['route_plan'] ?? null;
+                $plan = is_string($plan) ? json_decode($plan, true) : $plan;
+
+                if (is_array($plan) && is_array($plan['nodes'] ?? null) && $plan['nodes'] !== []) {
+                    $completed = is_array($run['completed_node_ids'] ?? null) ? array_values(array_filter($run['completed_node_ids'], 'is_string')) : [];
+                    $status = is_string($run['status'] ?? null) ? $run['status'] : null;
+
+                    return RunGraph::fromRoutePlan($plan, $completed, $status);
+                }
+            }
+        } catch (\Throwable) {
+            // Durable inspection unavailable or failed — fall back to run history.
+        }
+
+        return RunGraph::fromRun($data, $facets);
+    }
+
     public function infolist(Schema $schema): Schema
     {
         $data = $this->presented();
@@ -89,7 +128,7 @@ final class ViewSwarmRun extends ViewRecord
         // retired global "Memory Snapshots" list becomes a facet of the run.
         $runId = (string) $this->getRecord()->getKey();
         $facets = MemoryFacets::forRun(app(SnapshotsMemory::class), $runId);
-        $graph = RunGraph::fromRun($data, $facets);
+        $graph = self::resolveFlow($runId, $data, $facets);
 
         // Streaming and audit are facets of THIS run, folded in as sections — not
         // separate destinations. Both degrade to nothing/an empty-state when the

@@ -192,6 +192,78 @@ final class RunGraph
     }
 
     /**
+     * The declared route plan of a (static-)hierarchical run — the TRUE DAG.
+     *
+     * A durable hierarchical run persists its `route_plan` (`start_at` + `nodes`),
+     * which carries the real edges a flat run-history step list cannot: the
+     * parallel fan-out, the join back into the next worker, and the finish node.
+     * Rendering the plan directly gives the authored topology exactly (e.g. a
+     * gather → (a ∥ b) → write → finish diamond), with per-node execution status
+     * overlaid from `completed_node_ids`.
+     *
+     * Edge rules by node type:
+     * - **worker / rollup**: an edge to its `next` node.
+     * - **parallel**: an edge to each `branch`, and — since the branches rejoin
+     *   before the parallel node's `next` — an edge from each branch to `next`.
+     * - **finish**: terminal; `output_from` is data flow, not a control edge.
+     *
+     * @param  array{start_at?: string, nodes?: array<string, array<string, mixed>>}  $plan
+     * @param  list<string>  $completedNodeIds
+     * @return array{nodes: list<array<string, mixed>>, edges: list<array<string, mixed>>}
+     */
+    public static function fromRoutePlan(array $plan, array $completedNodeIds = [], ?string $runStatus = null): array
+    {
+        $planNodes = is_array($plan['nodes'] ?? null) ? $plan['nodes'] : [];
+        $completed = array_flip(array_values(array_filter($completedNodeIds, 'is_string')));
+
+        $nodes = [];
+        $edges = [];
+
+        foreach ($planNodes as $nodeId => $node) {
+            if (! is_string($nodeId) || ! is_array($node)) {
+                continue;
+            }
+            $type = self::str($node['type'] ?? null) ?? 'worker';
+            $agent = self::str($node['agent'] ?? null);
+
+            $nodes[] = [
+                'id' => 'plan:'.$nodeId,
+                'label' => $agent !== null ? class_basename($agent) : ucfirst($nodeId),
+                // Workers read as their node id; structural nodes name their type.
+                'sublabel' => $type === 'worker' ? $nodeId : $type,
+                'status' => isset($completed[$nodeId]) ? 'completed' : $runStatus,
+                'summary' => null,
+                'tokens' => null,
+                'detail_input' => null,
+                'detail_output' => null,
+                'detail_wrote' => [],
+                'detail_memory' => [],
+                'detail_tools' => [],
+            ];
+
+            if ($type === 'parallel') {
+                $branches = is_array($node['branches'] ?? null) ? array_values(array_filter($node['branches'], 'is_string')) : [];
+                $next = self::str($node['next'] ?? null);
+                foreach ($branches as $branch) {
+                    $edges[] = ['from' => 'plan:'.$nodeId, 'to' => 'plan:'.$branch, 'kind' => 'branch'];
+                    if ($next !== null) {
+                        $edges[] = ['from' => 'plan:'.$branch, 'to' => 'plan:'.$next, 'kind' => 'join'];
+                    }
+                }
+
+                continue;
+            }
+
+            $next = self::str($node['next'] ?? null);
+            if ($next !== null) {
+                $edges[] = ['from' => 'plan:'.$nodeId, 'to' => 'plan:'.$next, 'kind' => 'sequence'];
+            }
+        }
+
+        return ['nodes' => $nodes, 'edges' => $edges];
+    }
+
+    /**
      * The durable execution DAG: a root run node, the hierarchical/parallel
      * branches wired by `parent_node_id`, any node outputs not covered by a branch
      * chained in recorded order, and spawned child runs hung off the root. This is
