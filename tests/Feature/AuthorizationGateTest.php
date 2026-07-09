@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use BuiltByBerry\LaravelSwarmFilament\Concerns\AuthorizesSwarmObservability;
 use BuiltByBerry\LaravelSwarmFilament\Pages\SwarmHealthPage;
+use BuiltByBerry\LaravelSwarmFilament\Resources\SwarmResource;
 use BuiltByBerry\LaravelSwarmFilament\Support\SwarmObservabilityGate;
 use BuiltByBerry\LaravelSwarmFilament\Widgets\SwarmHealthWidget;
 use Illuminate\Database\Eloquent\Model;
@@ -16,12 +16,16 @@ use Illuminate\Support\Facades\Gate;
  * authenticated user; no definition means denied.
  */
 
-class GateStubResource
-{
-    use AuthorizesSwarmObservability;
-}
-
 class GateStubModel extends Model {}
+
+/**
+ * Minimal concrete resource over the abstract {@see SwarmResource} base, so these
+ * tests exercise the deny-by-default authorization hooks inlined on the base class.
+ */
+class GateStubResource extends SwarmResource
+{
+    protected static ?string $model = GateStubModel::class;
+}
 
 class GateStubUser extends Authenticatable {}
 
@@ -71,7 +75,7 @@ test('a null or empty ability turns the gate off — visible to any panel user',
     expect(SwarmObservabilityGate::allows())->toBeTrue();
 });
 
-test('the resource trait mirrors the gate across every authorization hook', function () {
+test('the resource base mirrors the gate across every authorization hook', function () {
     $this->actingAs(new GateStubUser);
     config()->set('swarm-filament.authorization.ability', 'viewSwarmObservability');
 
@@ -94,8 +98,8 @@ test('the shipped config default is the non-empty viewSwarmObservability ability
     expect(config('swarm-filament.authorization.ability'))->toBe('viewSwarmObservability');
 });
 
-test('the resource trait denies an unauthenticated user even with a permissive gate', function () {
-    // The no-user denial must hold through the trait hooks Filament actually calls,
+test('the resource base denies an unauthenticated user even with a permissive gate', function () {
+    // The no-user denial must hold through the base hooks Filament actually calls,
     // not just the raw helper.
     config()->set('swarm-filament.authorization.ability', 'viewSwarmObservability');
     Gate::define('viewSwarmObservability', fn (): bool => true);
@@ -115,10 +119,10 @@ test('the gate-off branch short-circuits before consulting the gate', function (
     expect(SwarmObservabilityGate::allows())->toBeTrue();
 });
 
-test('with the gate off, the resource trait grants any authenticated user (no Gate needed)', function () {
+test('with the gate off, the resource base grants any authenticated user (no Gate needed)', function () {
     // Surface-level proof of the "visible to any panel user" contract: with the
     // ability off, an ordinary user with NO Gate definition passes every Resource
-    // authorization hook — the trait grants rather than deferring to a policy.
+    // authorization hook — the base grants rather than deferring to a policy.
     $this->actingAs(new GateStubUser);
     config()->set('swarm-filament.authorization.ability', null);
 

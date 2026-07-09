@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace BuiltByBerry\LaravelSwarmFilament\Resources;
 
-use BuiltByBerry\LaravelSwarmFilament\Concerns\AuthorizesSwarmObservability;
 use BuiltByBerry\LaravelSwarmFilament\Concerns\ResolvesSwarmNavigation;
+use BuiltByBerry\LaravelSwarmFilament\Support\SwarmObservabilityGate;
 use Filament\Resources\Resource;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * Base class for the read-only observability resources.
@@ -16,17 +17,34 @@ use Filament\Resources\Resource;
  * folded into a run as facets rather than standalone resources. This stays an
  * abstract base so the shared seam holds if further resources are ever added.
  *
- * Applies the deny-by-default {@see AuthorizesSwarmObservability} gate so every
- * observability resource is authorized uniformly against the configured
- * `viewSwarmObservability` ability, and {@see ResolvesSwarmNavigation} so the
- * navigation placement is config-driven from one place — concrete resources
- * extend this rather than wiring either individually, so the authorization and
- * navigation surfaces can never drift resource-to-resource.
+ * Applies the deny-by-default {@see SwarmObservabilityGate} decision directly in
+ * its Filament authorization hooks so every observability resource — its
+ * navigation entry, its list, and its record views — is authorized uniformly
+ * against the configured `viewSwarmObservability` ability, and
+ * {@see ResolvesSwarmNavigation} so the navigation placement is config-driven from
+ * one place — concrete resources extend this rather than wiring either
+ * individually, so the authorization and navigation surfaces can never drift
+ * resource-to-resource. Pages and widgets apply the same gate in their own hooks,
+ * whose Filament authorization signatures differ from a Resource's.
  */
 abstract class SwarmResource extends Resource
 {
-    use AuthorizesSwarmObservability;
     use ResolvesSwarmNavigation;
+
+    public static function canAccess(): bool
+    {
+        return SwarmObservabilityGate::allows();
+    }
+
+    public static function canViewAny(): bool
+    {
+        return SwarmObservabilityGate::allows();
+    }
+
+    public static function canView(Model $record): bool
+    {
+        return SwarmObservabilityGate::allows();
+    }
 
     /**
      * The short label for a run's swarm class — the class basename, so an index

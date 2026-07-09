@@ -73,7 +73,7 @@ class SwarmFilamentServiceProvider extends PackageServiceProvider
         FilamentIcon::register($this->getIcons());
     }
 
-    protected function getAssetPackageName(): ?string
+    protected function getAssetPackageName(): string
     {
         return 'builtbyberry/laravel-swarm-filament';
     }
