@@ -9,9 +9,11 @@ use BuiltByBerry\LaravelSwarm\Contracts\ReadableRunHistoryStore;
 use BuiltByBerry\LaravelSwarm\Contracts\SnapshotsMemory;
 use BuiltByBerry\LaravelSwarm\Contracts\StreamEventStore;
 use BuiltByBerry\LaravelSwarm\Contracts\SwarmAuditSink;
+use BuiltByBerry\LaravelSwarm\Responses\DurableRunDetail;
 use BuiltByBerry\LaravelSwarmFilament\Models\SwarmRun;
 use BuiltByBerry\LaravelSwarmFilament\Resources\SwarmRunResource;
 use BuiltByBerry\LaravelSwarmFilament\Support\AuditTracePresenter;
+use BuiltByBerry\LaravelSwarmFilament\Support\DurableExecutionPresenter;
 use BuiltByBerry\LaravelSwarmFilament\Support\MemoryFacets;
 use BuiltByBerry\LaravelSwarmFilament\Support\RunDisplayPresenter;
 use BuiltByBerry\LaravelSwarmFilament\Support\RunGraph;
@@ -97,32 +99,53 @@ final class ViewSwarmRun extends ViewRecord
      * chokepoint inside RunGraph ({@see RunDisplayPresenter::renderField()}), never
      * rendered raw.
      *
+     * The durable detail is resolved ONCE per request by {@see durableDetail()} and
+     * passed in, so the flow builder and the read-only Durable execution facet
+     * ({@see DurableExecutionPresenter}) share a single {@see InspectsDurableRuns::inspect()}
+     * read rather than each re-fetching.
+     *
      * @param  array<string, mixed>  $data  the display record
      * @param  array<int, array<string, mixed>>  $facets
      * @return array{nodes: list<array<string, mixed>>, edges: list<array<string, mixed>>}
      */
-    private static function resolveFlow(string $runId, array $data, array $facets): array
+    private static function resolveFlow(?DurableRunDetail $detail, array $data, array $facets): array
+    {
+        if ($detail !== null) {
+            return self::selectFlow(
+                is_array($detail->run) ? $detail->run : [],
+                $detail->branches,
+                $detail->children,
+                $detail->hierarchicalNodeOutputs,
+                $data,
+                $facets,
+            );
+        }
+
+        return RunGraph::fromRun($data, $facets);
+    }
+
+    /**
+     * Resolve a run's durable inspection detail once, or null when the run is not a
+     * durable run (no durable row) or durable inspection is unbound/fails. Both the
+     * flow builder ({@see resolveFlow()}) and the read-only Durable execution facet
+     * consume this single {@see InspectsDurableRuns::inspect()} result.
+     *
+     * A non-durable run (or an inspection failure) yields null, so the flow falls
+     * back to run history and the Durable execution facet is simply not shown.
+     */
+    private static function durableDetail(string $runId): ?DurableRunDetail
     {
         try {
             $durable = app(InspectsDurableRuns::class);
 
             if ($durable->find($runId) !== null) {
-                $detail = $durable->inspect($runId);
-
-                return self::selectFlow(
-                    is_array($detail->run) ? $detail->run : [],
-                    $detail->branches,
-                    $detail->children,
-                    $detail->hierarchicalNodeOutputs,
-                    $data,
-                    $facets,
-                );
+                return $durable->inspect($runId);
             }
         } catch (\Throwable) {
-            // Durable inspection unavailable or failed — fall back to run history.
+            // Durable inspection unavailable or failed — treat as non-durable.
         }
 
-        return RunGraph::fromRun($data, $facets);
+        return null;
     }
 
     /**
@@ -175,7 +198,12 @@ final class ViewSwarmRun extends ViewRecord
         // retired global "Memory Snapshots" list becomes a facet of the run.
         $runId = (string) $this->getRecord()->getKey();
         $facets = MemoryFacets::forRun(app(SnapshotsMemory::class), $runId);
-        $graph = self::resolveFlow($runId, $data, $facets);
+
+        // Resolve durable inspection ONCE — shared by the flow builder (route plan /
+        // branch DAG) and the read-only Durable execution facet below, so the durable
+        // detail is read a single time per request rather than re-fetched.
+        $detail = self::durableDetail($runId);
+        $graph = self::resolveFlow($detail, $data, $facets);
 
         // Streaming and audit are facets of THIS run, folded in as sections — not
         // separate destinations. Both degrade to nothing/an empty-state when the
@@ -214,6 +242,21 @@ final class ViewSwarmRun extends ViewRecord
                     ->description('Why this run ended in a failed state.')
                     ->schema(self::failureSchema($data)),
             ]);
+        }
+
+        // A durable run's execution state as a READ-ONLY facet: what it is blocked on
+        // (waits), the signals it received, the progress it recorded, and its retry /
+        // recovery / timeout status. Shown ONLY for durable runs (the presenter
+        // returns null otherwise). Control (pause/resume/cancel/send-signal) is a paid
+        // operator-console concern and is deliberately absent here.
+        $durable = DurableExecutionPresenter::present($detail);
+        if ($durable !== null) {
+            $components[] = Section::make('Durable execution')
+                ->description('Read-only durable state: waits, signals, progress, and retry / recovery / timeout status.')
+                ->collapsible()
+                ->schema([
+                    ViewEntry::make('durable')->hiddenLabel()->view('swarm-filament::durable-execution')->state($durable),
+                ]);
         }
 
         if ((int) ($stream['node_count'] ?? 0) > 0) {
