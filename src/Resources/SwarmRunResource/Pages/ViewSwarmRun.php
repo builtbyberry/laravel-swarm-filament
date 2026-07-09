@@ -140,7 +140,9 @@ final class ViewSwarmRun extends ViewRecord
                 TextEntry::make('finished_at')->label('Finished')->dateTime()->placeholder('—')->state($data['finished_at']),
             ]);
 
-        return $schema->components($components);
+        // The run reads as one story top-to-bottom — a single full-width column, not
+        // the default two-column grid that scatters the sections.
+        return $schema->components($components)->columns(1);
     }
 
     /**
