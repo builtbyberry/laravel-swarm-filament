@@ -10,7 +10,11 @@ use BuiltByBerry\LaravelSwarmFilament\Support\SwarmObservabilityGate;
 use Filament\Widgets\Widget;
 
 /**
- * Base class for the read-only observability **Widgets** (health summary, …).
+ * Base class for the read-only observability **Widgets** — the Health summary
+ * ({@see SwarmHealthWidget}).
+ *
+ * Health is the only widget today; this stays an abstract base so the shared
+ * authorization seam holds if further widgets are ever added.
  *
  * The parallel of {@see SwarmResource}
  * for widgets. A Filament {@see Widget} authorizes through `canView(): bool` — a
