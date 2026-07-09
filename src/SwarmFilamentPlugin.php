@@ -50,27 +50,17 @@ class SwarmFilamentPlugin implements Plugin
 
     public function register(Panel $panel): void
     {
-        // All read-only observability surfaces. Resources back the run-scoped
-        // explorers (runs, durable state, memory snapshots); the rest are
-        // standalone pages/widgets. Every surface gates itself deny-by-default —
-        // resources via SwarmResource, pages/widgets via SwarmPage/SwarmWidget.
+        // Run-centric IA: the run is the hero object, so the only destinations are
+        // Runs (its index + the per-run story, where durable state / memory /
+        // streaming / audit appear as facets of a run) and the global Health page.
+        // Every surface gates itself deny-by-default via SwarmResource / SwarmPage /
+        // SwarmWidget.
         $panel
             ->resources([
                 Resources\SwarmRunResource::class,
-                Resources\SwarmDurableRunResource::class,
-                Resources\SwarmMemorySnapshotResource::class,
             ])
             ->pages([
-                // Per-run streaming / causal-log viewer (keyed by run id, reached
-                // from the runs explorer).
-                Pages\ViewSwarmStream::class,
-                // Health dashboard.
                 Pages\SwarmHealthPage::class,
-                // Audit surfaces: outbox health (non-consuming index + a
-                // payload-minimized single-row detail) and the per-run audit trace.
-                Pages\AuditOutboxHealth::class,
-                Pages\AuditOutboxRecord::class,
-                Pages\AuditTrace::class,
             ])
             ->widgets([
                 Widgets\SwarmHealthWidget::class,

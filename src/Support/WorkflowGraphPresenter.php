@@ -21,13 +21,13 @@ namespace BuiltByBerry\LaravelSwarmFilament\Support;
  */
 final class WorkflowGraphPresenter
 {
-    private const NODE_W = 200;
+    private const NODE_W = 240;
 
-    private const NODE_H = 60;
+    private const NODE_H = 104;
 
-    private const H_GAP = 72;
+    private const H_GAP = 80;
 
-    private const V_GAP = 26;
+    private const V_GAP = 28;
 
     private const PAD = 20;
 
@@ -45,12 +45,15 @@ final class WorkflowGraphPresenter
             if ($id === null || $id === '' || isset($byId[$id])) {
                 continue;
             }
-            $byId[$id] = [
+            // Preserve any extra presentation fields the adapter attached
+            // (summary, tokens, detail I/O for click-through) alongside the
+            // normalized identity/label the layout needs.
+            $byId[$id] = array_merge($node, [
                 'id' => $id,
                 'label' => self::str($node['label'] ?? null) ?? $id,
                 'sublabel' => self::str($node['sublabel'] ?? null),
                 'status' => self::str($node['status'] ?? null),
-            ];
+            ]);
         }
 
         if ($byId === []) {

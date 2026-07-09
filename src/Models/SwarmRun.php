@@ -36,6 +36,7 @@ use LogicException;
  * @property-read string $swarm_class
  * @property-read string $topology
  * @property-read string $status
+ * @property-read array<string, mixed> $usage
  * @property-read Carbon|null $created_at
  * @property-read Carbon|null $finished_at
  * @property-read Carbon|null $updated_at
@@ -55,7 +56,9 @@ class SwarmRun extends Model
     /**
      * The display-safe plaintext columns — the ONLY columns this model selects.
      * Deliberately excludes every sealed column (`context`, `output`, `steps`)
-     * and the operational columns (`execution_token`, `leased_until`).
+     * and the operational columns (`execution_token`, `leased_until`). `usage` is
+     * a plaintext token-count summary (never sealed), so the index can show cost
+     * without a per-row decrypt.
      *
      * @var list<string>
      */
@@ -64,6 +67,7 @@ class SwarmRun extends Model
         'swarm_class',
         'topology',
         'status',
+        'usage',
         'created_at',
         'finished_at',
         'updated_at',
@@ -73,6 +77,7 @@ class SwarmRun extends Model
      * @var array<string, string>
      */
     protected $casts = [
+        'usage' => 'array',
         'created_at' => 'datetime',
         'finished_at' => 'datetime',
         'updated_at' => 'datetime',
