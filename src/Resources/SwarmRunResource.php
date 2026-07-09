@@ -127,7 +127,10 @@ final class SwarmRunResource extends SwarmResource
             return null;
         }
 
-        $line = trim((string) preg_replace(['/^\[[^\]]+\]\s*/', '/\s+/'], ['', ' '], $value));
+        $line = (string) Str::of($value)
+            ->replaceMatches('/^\[[^\]]+\]\s*/', '')
+            ->replaceMatches('/\s+/', ' ')
+            ->trim();
 
         return $line === '' ? null : Str::limit($line, 90);
     }

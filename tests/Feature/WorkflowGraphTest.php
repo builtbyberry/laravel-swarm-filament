@@ -320,6 +320,22 @@ test('the run graph annotates nodes with the decision and a clipped output summa
         ->and($byId['step-1']['tokens'])->toBe(220);
 });
 
+test('summarize (F14) pins the label-strip + whitespace-collapse rewrite byte-identically', function () {
+    // The Str::of()->replaceMatches()->trim() rewrite of the former preg_replace
+    // chain must stay byte-identical: BOTH regexes fire here — a leading "[label] "
+    // is stripped, then a run of spaces, tabs, and newlines collapses to one space.
+    $graph = RunGraph::fromRun([
+        'status' => 'completed',
+        'steps' => [
+            ['step_index' => 0, 'agent_class' => 'App\\Agents\\Writer',
+                'output' => "[Writer]  Drafted   the\treply\nacross\nlines."],
+        ],
+    ]);
+
+    expect(collect($graph['nodes'])->keyBy('id')['step-0']['summary'])
+        ->toBe('Drafted the reply across lines.');
+});
+
 test('WorkflowGraphPresenter preserves extra node fields through layout', function () {
     $g = WorkflowGraphPresenter::present(
         [['id' => 'n', 'label' => 'N', 'summary' => 'did a thing', 'tokens' => 42, 'detail_output' => 'full']],
