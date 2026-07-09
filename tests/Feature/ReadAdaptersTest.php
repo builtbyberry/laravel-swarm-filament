@@ -154,6 +154,61 @@ test('DisplayField stringifies an array value via json_encode', function () {
     expect($field->display())->toBe('{"a":1}');
 });
 
+test('DisplayField masks a nested sealed leaf inside a structured value', function () {
+    // The nested-sw0: leak: ['q' => 'sw0:…'] json-encodes to {"q":"sw0:…"} which
+    // does NOT start with the sentinel, so a top-level-only check would render it.
+    $field = DisplayField::fromRow(['input' => ['q' => 'sw0:sealed'], 'input_available' => true], 'input');
+
+    expect($field->isAvailable())->toBeTrue()
+        ->and($field->display())->toBe('{"q":"unavailable"}')
+        ->and($field->display())->not->toContain('sw0:');
+});
+
+test('DisplayField masks a deeply nested sealed leaf (3+ levels)', function () {
+    $field = DisplayField::fromRow([
+        'input' => ['a' => ['b' => ['c' => 'sw0:deep']]],
+        'input_available' => true,
+    ], 'input');
+
+    expect($field->isAvailable())->toBeTrue()
+        ->and($field->display())->toBe('{"a":{"b":{"c":"unavailable"}}}')
+        ->and($field->display())->not->toContain('sw0:');
+});
+
+test('DisplayField masks only the sealed sibling and keeps plaintext siblings (partial mask)', function () {
+    // A mixed array must NOT degrade wholesale: the plaintext leaf survives, the
+    // sealed one is masked, and the field stays available.
+    $field = DisplayField::fromRow([
+        'input' => ['q' => 'sw0:secret', 'lang' => 'en'],
+        'input_available' => true,
+    ], 'input');
+
+    expect($field->isAvailable())->toBeTrue()
+        ->and($field->display())->toBe('{"q":"unavailable","lang":"en"}')
+        ->and($field->display())->not->toContain('sw0:');
+});
+
+test('DisplayField masks sealed leaves across an array-of-arrays', function () {
+    $field = DisplayField::fromRow([
+        'input' => [['v' => 'sw0:one'], ['v' => 'plain'], ['v' => 'sw0:two']],
+        'input_available' => true,
+    ], 'input');
+
+    expect($field->isAvailable())->toBeTrue()
+        ->and($field->display())->toBe('[{"v":"unavailable"},{"v":"plain"},{"v":"unavailable"}]')
+        ->and($field->display())->not->toContain('sw0:');
+});
+
+test('DisplayField degrades a bare sealed scalar to unavailable (recursion base case)', function () {
+    // The base case is preserved: a fully-sealed scalar string has no sibling to
+    // keep, so the whole field is unavailable (null, false) — not a partial mask.
+    $field = DisplayField::fromRow(['input' => 'sw0:sealed', 'input_available' => true], 'input');
+
+    expect($field->value)->toBeNull()
+        ->and($field->isAvailable())->toBeFalse()
+        ->and($field->display())->toBe('unavailable');
+});
+
 test('DisplayField renders an available empty string as-is (a real, non-placeholder value)', function () {
     $field = DisplayField::fromRow(['input' => '', 'input_available' => true], 'input');
 
