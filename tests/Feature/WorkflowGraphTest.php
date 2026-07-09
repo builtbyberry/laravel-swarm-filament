@@ -109,6 +109,65 @@ test('a run with no steps yields an empty flow', function () {
         ->and(RunGraph::fromRun([])['edges'])->toBe([]);
 });
 
+test('a parallel run fans a synthetic origin out to every branch', function () {
+    $graph = RunGraph::fromRun([
+        'status' => 'completed',
+        'topology' => 'parallel',
+        'swarm_class' => 'App\\Swarms\\MarketResearch',
+        'steps' => [
+            ['step_index' => 0, 'agent_class' => 'App\\Agents\\MarketScout'],
+            ['step_index' => 1, 'agent_class' => 'App\\Agents\\CompetitorScout'],
+            ['step_index' => 2, 'agent_class' => 'App\\Agents\\CustomerScout'],
+        ],
+    ]);
+
+    $ids = array_column($graph['nodes'], 'id');
+    // the synthetic origin is prepended and labelled by the swarm
+    expect($ids[0])->toBe('run-origin')
+        ->and($graph['nodes'][0]['label'])->toBe('MarketResearch')
+        ->and($graph['nodes'])->toHaveCount(4)
+        // origin fans out to each branch; branches do not chain to one another
+        ->and($graph['edges'])->toHaveCount(3)
+        ->and($graph['edges'])->toContainEqual(['from' => 'run-origin', 'to' => 'step-0', 'kind' => 'parallel'])
+        ->and($graph['edges'])->toContainEqual(['from' => 'run-origin', 'to' => 'step-2', 'kind' => 'parallel']);
+});
+
+test('a hierarchical run routes the coordinator to every worker', function () {
+    $graph = RunGraph::fromRun([
+        'status' => 'completed',
+        'topology' => 'hierarchical',
+        'steps' => [
+            ['step_index' => 0, 'agent_class' => 'App\\Agents\\Classifier', 'role' => 'coordinator'],
+            ['step_index' => 1, 'agent_class' => 'App\\Agents\\Billing', 'decision' => 'billing'],
+            ['step_index' => 2, 'agent_class' => 'App\\Agents\\Tech', 'decision' => 'technical'],
+        ],
+    ]);
+
+    // no synthetic origin — the coordinator agent IS the root
+    expect(array_column($graph['nodes'], 'id'))->toBe(['step-0', 'step-1', 'step-2'])
+        ->and($graph['edges'])->toHaveCount(2)
+        ->and($graph['edges'])->toContainEqual(['from' => 'step-0', 'to' => 'step-1', 'kind' => 'route'])
+        ->and($graph['edges'])->toContainEqual(['from' => 'step-0', 'to' => 'step-2', 'kind' => 'route']);
+});
+
+test('a static_hierarchical run falls back to an honest execution-order chain', function () {
+    // The true fan-out/join DAG is only recoverable from durable branch records
+    // (fromDurable); a non-durable run's flat step list is shown in order.
+    $graph = RunGraph::fromRun([
+        'status' => 'completed',
+        'topology' => 'static_hierarchical',
+        'steps' => [
+            ['step_index' => 0, 'agent_class' => 'App\\Agents\\ChangeScanner'],
+            ['step_index' => 1, 'agent_class' => 'App\\Agents\\RiskScanner'],
+            ['step_index' => 2, 'agent_class' => 'App\\Agents\\NotesWriter'],
+        ],
+    ]);
+
+    expect($graph['nodes'])->toHaveCount(3)
+        ->and($graph['edges'])->toHaveCount(2)
+        ->and($graph['edges'][0])->toMatchArray(['from' => 'step-0', 'to' => 'step-1', 'kind' => 'sequence']);
+});
+
 // --- RunGraph::fromDurable: DurableRunDetail → the DAG ---------------------
 
 test('the durable DAG wires branches by parent, plus a root and child runs', function () {

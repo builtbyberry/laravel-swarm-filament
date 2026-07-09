@@ -112,7 +112,9 @@ final class ViewSwarmRun extends ViewRecord
             Section::make('Final output')
                 ->collapsible()
                 ->schema([
-                    TextEntry::make('output')->hiddenLabel()->state($data['output']),
+                    // Agent output is frequently Markdown (headings, lists) — render it
+                    // as such. Plain-text and the degrade sentinels pass through cleanly.
+                    TextEntry::make('output')->hiddenLabel()->markdown()->state($data['output']),
                 ]),
         ];
 

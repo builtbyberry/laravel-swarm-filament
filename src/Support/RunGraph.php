@@ -14,9 +14,19 @@ namespace BuiltByBerry\LaravelSwarmFilament\Support;
 final class RunGraph
 {
     /**
-     * The run/step flow for a run-history detail: the steps as a left-to-right
-     * chain (coordinator → … → final agent). Run history carries no per-step
-     * topology edges, so a sequential chain is the honest, readable shape.
+     * The run/step flow for a run-history detail. Each recorded step becomes a
+     * node; the edges are derived from the run's **topology**, because run-history
+     * steps carry order + role/decision but no explicit parent/branch edges:
+     *
+     * - **sequential** (and any unknown topology): a left-to-right chain.
+     * - **parallel**: a synthetic run-origin fanning out to every step — the
+     *   runner merges the branch results into the response, so there is no join
+     *   agent to draw.
+     * - **hierarchical**: the coordinator step routes to every worker step.
+     * - **static_hierarchical**: the true DAG (parallel branches, joins) lives
+     *   only in a durable run's branch records — see {@see fromDurable()}. From a
+     *   non-durable run's flat step list we can only honestly show the recorded
+     *   execution order as a chain rather than invent a shape we cannot verify.
      *
      * @param  array<string, mixed>  $presented  a {@see RunDisplayPresenter::present()} record
      * @param  array<int, array<string, mixed>>  $facets  per-step memory/tool facets keyed by step index ({@see MemoryFacets::forRun()})
@@ -26,10 +36,11 @@ final class RunGraph
     {
         $steps = is_array($presented['steps'] ?? null) ? $presented['steps'] : [];
         $runStatus = is_string($presented['status'] ?? null) ? $presented['status'] : null;
+        $topology = is_string($presented['topology'] ?? null) ? $presented['topology'] : null;
 
         $nodes = [];
-        $edges = [];
-        $prev = null;
+        $ids = [];    // ordinal => node id, in recorded order
+        $roles = [];  // ordinal => role (e.g. 'coordinator')
 
         foreach (array_values($steps) as $i => $step) {
             if (! is_array($step)) {
@@ -61,13 +72,106 @@ final class RunGraph
                 'detail_memory' => is_array($facet['entries'] ?? null) ? array_values($facet['entries']) : [],
                 'detail_tools' => is_array($facet['tools'] ?? null) ? array_values($facet['tools']) : [],
             ];
+            $ids[$i] = $id;
+            $roles[$i] = $role;
+        }
+
+        [$origin, $edges] = self::wireRunTopology($topology, $ids, $roles, $runStatus, $presented);
+
+        if ($origin !== null) {
+            array_unshift($nodes, $origin);
+        }
+
+        return ['nodes' => $nodes, 'edges' => $edges];
+    }
+
+    /**
+     * Derive the flow edges (and an optional synthetic origin node) from the run's
+     * topology. See {@see fromRun()} for the per-topology rationale.
+     *
+     * @param  array<int, string>  $ids  ordinal => node id, in recorded order
+     * @param  array<int, ?string>  $roles  ordinal => role
+     * @param  array<string, mixed>  $presented
+     * @return array{0: ?array<string, mixed>, 1: list<array<string, mixed>>}
+     */
+    private static function wireRunTopology(?string $topology, array $ids, array $roles, ?string $runStatus, array $presented): array
+    {
+        if ($ids === []) {
+            return [null, []];
+        }
+
+        if ($topology === 'parallel') {
+            // A synthetic run node fans out to every branch — the branches share
+            // the original task and run concurrently, then merge into the response.
+            $swarm = is_string($presented['swarm_class'] ?? null) ? class_basename($presented['swarm_class']) : 'Run';
+            $origin = self::syntheticNode('run-origin', $swarm, 'fan-out', $runStatus);
+
+            $edges = [];
+            foreach ($ids as $id) {
+                $edges[] = ['from' => 'run-origin', 'to' => $id, 'kind' => 'parallel'];
+            }
+
+            return [$origin, $edges];
+        }
+
+        if ($topology === 'hierarchical') {
+            // The coordinator (the step tagged as such, else the first) routes to
+            // every worker step.
+            $coordinatorOrdinal = null;
+            foreach ($roles as $ordinal => $role) {
+                if ($role === 'coordinator') {
+                    $coordinatorOrdinal = $ordinal;
+
+                    break;
+                }
+            }
+            $coordinatorOrdinal ??= array_key_first($ids);
+            $coordinatorId = $ids[$coordinatorOrdinal];
+
+            $edges = [];
+            foreach ($ids as $ordinal => $id) {
+                if ($ordinal !== $coordinatorOrdinal) {
+                    $edges[] = ['from' => $coordinatorId, 'to' => $id, 'kind' => 'route'];
+                }
+            }
+
+            return [null, $edges];
+        }
+
+        // sequential, static_hierarchical, and any unknown topology: honest chain.
+        $edges = [];
+        $prev = null;
+        foreach ($ids as $id) {
             if ($prev !== null) {
                 $edges[] = ['from' => $prev, 'to' => $id, 'kind' => 'sequence'];
             }
             $prev = $id;
         }
 
-        return ['nodes' => $nodes, 'edges' => $edges];
+        return [null, $edges];
+    }
+
+    /**
+     * A structural node with no per-step detail (e.g. the parallel run-origin), so
+     * it renders as a clean box and its click-through detail is empty.
+     *
+     * @return array<string, mixed>
+     */
+    private static function syntheticNode(string $id, string $label, string $sublabel, ?string $status): array
+    {
+        return [
+            'id' => $id,
+            'label' => $label,
+            'sublabel' => $sublabel,
+            'status' => $status,
+            'summary' => null,
+            'tokens' => null,
+            'detail_input' => null,
+            'detail_output' => null,
+            'detail_wrote' => [],
+            'detail_memory' => [],
+            'detail_tools' => [],
+        ];
     }
 
     /**
