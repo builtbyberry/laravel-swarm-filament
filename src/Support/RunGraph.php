@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace BuiltByBerry\LaravelSwarmFilament\Support;
 
+use Illuminate\Support\Str;
+
 /**
  * Builds the node + edge sets that {@see WorkflowGraphPresenter} lays out, from the
  * display records the read surfaces already resolve. Pure — no container, no store.
@@ -185,10 +187,10 @@ final class RunGraph
             return $output === null ? null : $output;
         }
 
-        $text = (string) preg_replace('/^\[[^\]]+\]\s*/', '', $output);
-        $text = (string) preg_replace('/\s+/', ' ', $text);
-
-        return trim($text);
+        return (string) Str::of($output)
+            ->replaceMatches('/^\[[^\]]+\]\s*/', '')
+            ->replaceMatches('/\s+/', ' ')
+            ->trim();
     }
 
     /**

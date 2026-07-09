@@ -284,3 +284,26 @@ test('the detail resolve maps the display record through the presenter when pres
         ->and($presented['context'])->toBe('the prompt')
         ->and($presented['output'])->toBe('the answer');
 });
+
+// ---------------------------------------------------------------------------
+// runSummary gist (F14) — pins the label-strip + whitespace-collapse rewrite.
+// ---------------------------------------------------------------------------
+
+test('runSummary gist (F14) pins the label-strip + whitespace-collapse rewrite byte-identically', function () {
+    // The Str::of()->replaceMatches()->trim() rewrite of the former array-form
+    // preg_replace must stay byte-identical: a leading "[label] " is stripped and
+    // a run of spaces, tabs, and newlines collapses to one space. Driven through the
+    // real ReadableRunHistoryStore::findForDisplay() contract so it pins the rewrite
+    // on the exact data path a rendered index row's scan line takes.
+    app()->instance(ReadableRunHistoryStore::class, runsExplorerStore([
+        'run_id' => 'gist-pin', 'swarm_class' => 'App\\Swarms\\Example',
+        'topology' => 'sequential', 'status' => 'completed',
+        'context' => ['input' => "[User]  Refund   the\tlast\ncharge."], 'context_available' => true,
+        'output' => null, 'output_available' => false,
+        'steps' => [],
+    ]));
+
+    // Unique run id so the per-request summary memo never returns a stale entry.
+    expect(SwarmRunResource::runSummary('gist-pin-'.uniqid()))
+        ->toBe('Refund the last charge.');
+});

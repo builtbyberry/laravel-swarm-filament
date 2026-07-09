@@ -13,7 +13,7 @@ namespace BuiltByBerry\LaravelSwarmFilament\Support;
  * viewer), never `sw0:` ciphertext. Colour comes from the {@see HealthStatus} enum
  * ({@see HealthStatus::getColor()}), so it is defined in exactly one place.
  */
-final class HealthCheck
+final readonly class HealthCheck
 {
     public function __construct(
         public string $key,

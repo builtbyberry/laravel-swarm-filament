@@ -365,7 +365,7 @@ final class StreamTimelinePresenter
     private static function scrub(mixed $value): mixed
     {
         if (is_array($value)) {
-            return array_map(static fn (mixed $item): mixed => self::scrub($item), $value);
+            return array_map(self::scrub(...), $value);
         }
 
         if (is_string($value)) {

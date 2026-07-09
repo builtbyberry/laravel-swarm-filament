@@ -46,9 +46,9 @@ final class SwarmHealthReport
      * @param  list<HealthCheck>  $checks
      */
     private function __construct(
-        public bool $ok,
-        public HealthStatus $status,
-        public array $checks,
+        public readonly bool $ok,
+        public readonly HealthStatus $status,
+        public readonly array $checks,
     ) {}
 
     public static function for(InspectsDurableRuns $durable, ReadableAuditOutbox $audit, ?LoggerInterface $logger = null): self

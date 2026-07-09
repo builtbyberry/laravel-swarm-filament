@@ -28,7 +28,7 @@ namespace BuiltByBerry\LaravelSwarmFilament\Support;
  *
  * Never throws.
  */
-final class DisplayField
+final readonly class DisplayField
 {
     /**
      * Core's persisted-cipher sentinel prefix. Inlined as a literal (with a test
@@ -45,8 +45,8 @@ final class DisplayField
     private const MASKED_LEAF = 'unavailable';
 
     public function __construct(
-        public readonly ?string $value,
-        public readonly bool $available,
+        public ?string $value,
+        public bool $available,
     ) {}
 
     /**
