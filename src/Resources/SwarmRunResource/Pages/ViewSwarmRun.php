@@ -4,17 +4,28 @@ declare(strict_types=1);
 
 namespace BuiltByBerry\LaravelSwarmFilament\Resources\SwarmRunResource\Pages;
 
+use BuiltByBerry\LaravelSwarm\Contracts\InspectsDurableRuns;
 use BuiltByBerry\LaravelSwarm\Contracts\ReadableRunHistoryStore;
+use BuiltByBerry\LaravelSwarm\Contracts\SnapshotsMemory;
+use BuiltByBerry\LaravelSwarm\Contracts\StreamEventStore;
+use BuiltByBerry\LaravelSwarm\Contracts\SwarmAuditSink;
 use BuiltByBerry\LaravelSwarmFilament\Models\SwarmRun;
 use BuiltByBerry\LaravelSwarmFilament\Resources\SwarmRunResource;
+use BuiltByBerry\LaravelSwarmFilament\Support\AuditTracePresenter;
+use BuiltByBerry\LaravelSwarmFilament\Support\MemoryFacets;
 use BuiltByBerry\LaravelSwarmFilament\Support\RunDisplayPresenter;
+use BuiltByBerry\LaravelSwarmFilament\Support\RunGraph;
+use BuiltByBerry\LaravelSwarmFilament\Support\StreamTimelinePresenter;
+use BuiltByBerry\LaravelSwarmFilament\Support\WorkflowGraphPresenter;
 use Filament\Actions\Action;
-use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Infolists\Components\ViewEntry;
 use Filament\Resources\Pages\ViewRecord;
+use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Str;
 
 /**
  * The per-run detail view: run summary, context, output, and a step timeline.
@@ -69,43 +80,150 @@ final class ViewSwarmRun extends ViewRecord
         return RunDisplayPresenter::present($display);
     }
 
+    /**
+     * Resolve the workflow flow for a run, preferring the TRUE authored DAG.
+     *
+     * A durable (static-)hierarchical run persists its declared `route_plan`, whose
+     * edges capture the real topology — parallel fan-out, joins, finish — that a
+     * flat run-history step list cannot ({@see RunGraph::fromRoutePlan()}). For any
+     * other run (non-durable, or durable without a plan), and whenever durable
+     * inspection is unbound or fails, fall back to the topology-derived flow over
+     * run history ({@see RunGraph::fromRun()}).
+     *
+     * @param  array<string, mixed>  $data  the display record
+     * @param  array<int, array<string, mixed>>  $facets
+     * @return array{nodes: list<array<string, mixed>>, edges: list<array<string, mixed>>}
+     */
+    private static function resolveFlow(string $runId, array $data, array $facets): array
+    {
+        try {
+            $durable = app(InspectsDurableRuns::class);
+
+            if ($durable->find($runId) !== null) {
+                $run = $durable->inspect($runId)->run ?? [];
+                $plan = $run['route_plan'] ?? null;
+                $plan = is_string($plan) ? json_decode($plan, true) : $plan;
+
+                if (is_array($plan) && is_array($plan['nodes'] ?? null) && $plan['nodes'] !== []) {
+                    $completed = is_array($run['completed_node_ids'] ?? null) ? array_values(array_filter($run['completed_node_ids'], 'is_string')) : [];
+                    $status = is_string($run['status'] ?? null) ? $run['status'] : null;
+
+                    return RunGraph::fromRoutePlan($plan, $completed, $status);
+                }
+            }
+        } catch (\Throwable) {
+            // Durable inspection unavailable or failed — fall back to run history.
+        }
+
+        return RunGraph::fromRun($data, $facets);
+    }
+
     public function infolist(Schema $schema): Schema
     {
         $data = $this->presented();
 
-        return $schema->components([
-            Section::make('Run')
-                ->columns(2)
+        // Fold the run's memory snapshots into the flow: each step node carries the
+        // keys it wrote, the memory it could see, and the tools it called — so the
+        // retired global "Memory Snapshots" list becomes a facet of the run.
+        $runId = (string) $this->getRecord()->getKey();
+        $facets = MemoryFacets::forRun(app(SnapshotsMemory::class), $runId);
+        $graph = self::resolveFlow($runId, $data, $facets);
+
+        // Streaming and audit are facets of THIS run, folded in as sections — not
+        // separate destinations. Both degrade to nothing/an empty-state when the
+        // run produced no stream events / the app binds no readable audit sink.
+        $stream = StreamTimelinePresenter::present(app(StreamEventStore::class)->events($runId));
+        $audit = AuditTracePresenter::present(app(SwarmAuditSink::class), $runId);
+
+        $components = [
+            // The flow is the page: a one-line headline (the "so what"), the request
+            // that started it, the annotated graph (click a step for full I/O), and
+            // the final output. Per-step detail lives in the graph, not a table.
+            Section::make(self::headline($data))
+                ->description(is_string($data['context'] ?? null) ? $data['context'] : null)
                 ->schema([
-                    TextEntry::make('run_id')->label('Run')->state($data['run_id'])->fontFamily('mono'),
-                    TextEntry::make('swarm_class')->label('Swarm')->state($data['swarm_class']),
-                    TextEntry::make('topology')->badge()->state($data['topology']),
-                    TextEntry::make('status')
-                        ->badge()
-                        ->color(SwarmRunResource::statusColor(is_string($data['status']) ? $data['status'] : null))
-                        ->state($data['status']),
-                    TextEntry::make('started_at')->label('Started')->dateTime()->state($data['started_at']),
-                    TextEntry::make('finished_at')->label('Finished')->dateTime()->placeholder('—')->state($data['finished_at']),
+                    ViewEntry::make('workflow')
+                        ->hiddenLabel()
+                        ->view('swarm-filament::graph')
+                        ->state(WorkflowGraphPresenter::present($graph['nodes'], $graph['edges'])),
                 ]),
-            Section::make('Context')->schema([
-                TextEntry::make('context')->hiddenLabel()->state($data['context']),
-            ]),
-            Section::make('Output')->schema([
-                TextEntry::make('output')->hiddenLabel()->state($data['output']),
-            ]),
-            Section::make('Steps')->schema([
-                RepeatableEntry::make('steps')
-                    ->hiddenLabel()
-                    ->state($data['steps'])
-                    ->placeholder('No steps recorded.')
-                    ->schema([
-                        TextEntry::make('step_index')->label('#'),
-                        TextEntry::make('agent_class')->label('Agent'),
-                        TextEntry::make('input'),
-                        TextEntry::make('output'),
-                    ]),
-            ]),
+            Section::make('Final output')
+                ->collapsible()
+                ->schema([
+                    // Agent output is frequently Markdown (headings, lists) — render it
+                    // as such. Plain-text and the degrade sentinels pass through cleanly.
+                    TextEntry::make('output')->hiddenLabel()->markdown()->state($data['output']),
+                ]),
+        ];
+
+        if ((int) ($stream['node_count'] ?? 0) > 0) {
+            $components[] = Section::make('Streaming')
+                ->description('The per-node causal log of what streamed while this run executed.')
+                ->collapsed()
+                ->schema([
+                    ViewEntry::make('streaming')->hiddenLabel()->view('swarm-filament::timeline')->state($stream),
+                ]);
+        }
+
+        $components[] = Section::make('Audit trail')
+            ->description('Evidence this run emitted to the application\'s audit sink.')
+            ->collapsed()
+            ->schema(self::auditSchema($audit));
+
+        $components[] = Section::make('Run details')
+            ->collapsed()
+            ->columns(2)
+            ->schema([
+                TextEntry::make('run_id')->label('Run')->state($data['run_id'])->fontFamily('mono')->copyable(),
+                TextEntry::make('swarm_class')->label('Swarm')->state($data['swarm_class']),
+                TextEntry::make('started_at')->label('Started')->dateTime()->state($data['started_at']),
+                TextEntry::make('finished_at')->label('Finished')->dateTime()->placeholder('—')->state($data['finished_at']),
+            ]);
+
+        // The run reads as one story top-to-bottom — a single full-width column, not
+        // the default two-column grid that scatters the sections.
+        return $schema->components($components)->columns(1);
+    }
+
+    /**
+     * The Audit trail section content: a compact one-line-per-event timeline of the
+     * run's emitted evidence when a readable sink is bound, otherwise the presenter's
+     * plain-language empty-state note (e.g. core's default sink stores nothing). Both
+     * cases are handled inside the timeline partial from the presenter record.
+     *
+     * @param  array<string, mixed>  $audit  an {@see AuditTracePresenter::present()} record
+     * @return list<Component>
+     */
+    private static function auditSchema(array $audit): array
+    {
+        return [
+            ViewEntry::make('audit')
+                ->hiddenLabel()
+                ->view('swarm-filament::audit-timeline')
+                ->state($audit),
+        ];
+    }
+
+    /**
+     * The plain-language "so what" line for the run — outcome, shape, and the
+     * cost/latency metrics when there are any to report.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private static function headline(array $data): string
+    {
+        $metrics = is_array($data['metrics'] ?? null) ? $data['metrics'] : [];
+        $swarm = is_string($data['swarm_class'] ?? null) ? class_basename($data['swarm_class']) : 'Run';
+
+        $parts = array_filter([
+            is_string($data['status'] ?? null) ? ucfirst($data['status']) : null,
+            is_string($data['topology'] ?? null) ? $data['topology'] : null,
+            ($metrics['steps'] ?? 0).' '.Str::plural('step', $metrics['steps'] ?? 0),
+            isset($metrics['duration']) && is_string($metrics['duration']) ? $metrics['duration'] : null,
+            isset($metrics['tokens']) && is_int($metrics['tokens']) ? number_format($metrics['tokens']).' tokens' : null,
         ]);
+
+        return $swarm.' · '.implode(' · ', $parts);
     }
 
     /**

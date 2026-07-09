@@ -116,8 +116,8 @@ test('the presenter maps the step timeline and degrades per step field', functio
     ]);
 
     expect($presented['steps'])->toHaveCount(2)
-        ->and($presented['steps'][0])->toBe(['step_index' => 0, 'agent_class' => 'Writer', 'input' => 'draft', 'output' => 'unavailable'])
-        ->and($presented['steps'][1])->toBe(['step_index' => 1, 'agent_class' => 'Reviewer', 'input' => 'none', 'output' => 'none']);
+        ->and($presented['steps'][0])->toBe(['step_index' => 0, 'agent_class' => 'Writer', 'role' => null, 'decision' => null, 'tokens' => null, 'input' => 'draft', 'output' => 'unavailable'])
+        ->and($presented['steps'][1])->toBe(['step_index' => 1, 'agent_class' => 'Reviewer', 'role' => null, 'decision' => null, 'tokens' => null, 'input' => 'none', 'output' => 'none']);
 });
 
 test('the presenter tolerates a malformed steps value', function () {
