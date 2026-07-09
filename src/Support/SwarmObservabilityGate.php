@@ -15,8 +15,14 @@ use Illuminate\Support\Facades\Gate;
  * ability — `config('swarm-filament.authorization.ability')`, default
  * `viewSwarmObservability`. With no Gate defined for that ability, `Gate::allows`
  * returns false, so the surfaces stay hidden until the operator explicitly grants
- * access. Setting the config ability to `null` (or an empty string) defers
- * entirely to Filament's own panel / resource authorization instead.
+ * access.
+ *
+ * Setting the config ability to `null` (or an empty string) turns the package gate
+ * OFF: `allows()` returns true, so every surface becomes visible to any user who can
+ * already reach the Filament panel. It does NOT hand off to a per-resource policy —
+ * these hooks ARE the resource's authorization, so returning true is the final grant.
+ * This is an explicit opt-out; the shipped default ability is a non-empty string,
+ * which keeps the surfaces deny-by-default.
  *
  * Resources apply {@see AuthorizesSwarmObservability},
  * which delegates here; pages and widgets (whose Filament authorization hooks have
@@ -30,7 +36,8 @@ final class SwarmObservabilityGate
         $ability = config('swarm-filament.authorization.ability');
 
         if (! is_string($ability) || $ability === '') {
-            // Deferred — let Filament's own authorization decide.
+            // No ability configured → the package gate is off: visible to any
+            // panel user. (Opt-out only; the default ability is a non-empty string.)
             return true;
         }
 

@@ -56,9 +56,16 @@ test('denies when the host Gate denies the ability for the user', function () {
     expect(SwarmObservabilityGate::allows())->toBeFalse();
 });
 
-test('defers to Filament authorization when the ability is null or empty', function () {
+test('a null or empty ability turns the gate off — visible to any panel user', function () {
+    // Ability off is a grant, not a hand-off to a per-resource policy: allows()
+    // returns true regardless of user or Gate state. A bare (no-privilege) user,
+    // and even no user at all, is granted — the surface is visible to anyone who
+    // can already reach the panel.
     config()->set('swarm-filament.authorization.ability', null);
-    expect(SwarmObservabilityGate::allows())->toBeTrue();
+    expect(SwarmObservabilityGate::allows())->toBeTrue();      // no authenticated user
+
+    $this->actingAs(new GateStubUser);
+    expect(SwarmObservabilityGate::allows())->toBeTrue();      // ordinary panel user
 
     config()->set('swarm-filament.authorization.ability', '');
     expect(SwarmObservabilityGate::allows())->toBeTrue();
@@ -98,14 +105,26 @@ test('the resource trait denies an unauthenticated user even with a permissive g
         ->and(GateStubResource::canView(new GateStubModel))->toBeFalse();
 });
 
-test('the defer branch short-circuits before consulting the gate', function () {
+test('the gate-off branch short-circuits before consulting the gate', function () {
     // With ability=null, a DENYING gate must be irrelevant — proving allows()
-    // returns before ever calling Gate::allows().
+    // returns before ever calling Gate::allows() (the gate is off, not deferring).
     $this->actingAs(new GateStubUser);
     config()->set('swarm-filament.authorization.ability', null);
     Gate::define('viewSwarmObservability', fn (): bool => false);
 
     expect(SwarmObservabilityGate::allows())->toBeTrue();
+});
+
+test('with the gate off, the resource trait grants any authenticated user (no Gate needed)', function () {
+    // Surface-level proof of the "visible to any panel user" contract: with the
+    // ability off, an ordinary user with NO Gate definition passes every Resource
+    // authorization hook — the trait grants rather than deferring to a policy.
+    $this->actingAs(new GateStubUser);
+    config()->set('swarm-filament.authorization.ability', null);
+
+    expect(GateStubResource::canAccess())->toBeTrue()
+        ->and(GateStubResource::canViewAny())->toBeTrue()
+        ->and(GateStubResource::canView(new GateStubModel))->toBeTrue();
 });
 
 /*
@@ -158,7 +177,7 @@ test('the health widget canView denies an unauthenticated user even with a permi
     expect(SwarmHealthWidget::canView())->toBeFalse();
 });
 
-test('the page and widget defer to Filament authorization when the ability is null', function () {
+test('with the gate off, the page and widget are visible to any panel user', function () {
     config()->set('swarm-filament.authorization.ability', null);
 
     expect(SwarmHealthPage::canAccess())->toBeTrue()
