@@ -132,6 +132,47 @@ test('a parallel run fans a synthetic origin out to every branch', function () {
         ->and($graph['edges'])->toContainEqual(['from' => 'run-origin', 'to' => 'step-2', 'kind' => 'parallel']);
 });
 
+test('fromRun folds per-step memory facets onto the step nodes', function () {
+    $graph = RunGraph::fromRun([
+        'status' => 'completed',
+        'topology' => 'sequential',
+        'steps' => [
+            ['step_index' => 0, 'agent_class' => 'App\\Agents\\A'],
+            ['step_index' => 1, 'agent_class' => 'App\\Agents\\B'],
+        ],
+    ], [
+        1 => [
+            'wrote' => ['summary'],
+            'entries' => [['scope' => 'run', 'scope_id' => 'r', 'key' => 'summary', 'value' => 'done']],
+            'tools' => ['search'],
+        ],
+    ]);
+
+    $byId = collect($graph['nodes'])->keyBy('id');
+    expect($byId['step-1']['detail_wrote'])->toBe(['summary'])
+        ->and($byId['step-1']['detail_tools'])->toBe(['search'])
+        ->and($byId['step-1']['detail_memory'])->toHaveCount(1)
+        ->and($byId['step-0']['detail_wrote'])->toBe([]);   // no facet for step 0
+});
+
+test('a hierarchical run with no tagged coordinator roots on the first step', function () {
+    // The coordinator-detection fallback: when no step carries role=coordinator,
+    // the first step becomes the routing root.
+    $graph = RunGraph::fromRun([
+        'status' => 'completed',
+        'topology' => 'hierarchical',
+        'steps' => [
+            ['step_index' => 0, 'agent_class' => 'App\\Agents\\Router'],   // no role tagged
+            ['step_index' => 1, 'agent_class' => 'App\\Agents\\Worker1'],
+            ['step_index' => 2, 'agent_class' => 'App\\Agents\\Worker2'],
+        ],
+    ]);
+
+    expect($graph['edges'])->toHaveCount(2)
+        ->and($graph['edges'])->toContainEqual(['from' => 'step-0', 'to' => 'step-1', 'kind' => 'route'])
+        ->and($graph['edges'])->toContainEqual(['from' => 'step-0', 'to' => 'step-2', 'kind' => 'route']);
+});
+
 test('a hierarchical run routes the coordinator to every worker', function () {
     $graph = RunGraph::fromRun([
         'status' => 'completed',
@@ -212,6 +253,26 @@ test('a route plan overlays incomplete nodes with the run status', function () {
     $byId = collect($graph['nodes'])->keyBy('id');
     expect($byId['plan:a']['status'])->toBe('completed')   // in completed_node_ids
         ->and($byId['plan:b']['status'])->toBe('running');  // inherits the live run status
+});
+
+test('fromRoutePlan handles a rollup node and a parallel node without a next', function () {
+    $graph = RunGraph::fromRoutePlan([
+        'start_at' => 'fan',
+        'nodes' => [
+            'fan' => ['type' => 'parallel', 'branches' => ['x', 'y']],   // no 'next' → no join edges
+            'x' => ['type' => 'worker', 'agent' => 'App\\Agents\\X', 'next' => 'roll'],
+            'y' => ['type' => 'worker', 'agent' => 'App\\Agents\\Y', 'next' => 'roll'],
+            'roll' => ['type' => 'rollup', 'agent' => 'App\\Agents\\Roller', 'next' => 'done'],
+            'done' => ['type' => 'finish', 'output_from' => 'roll'],
+        ],
+    ]);
+
+    expect($graph['edges'])->toContainEqual(['from' => 'plan:fan', 'to' => 'plan:x', 'kind' => 'branch'])
+        ->and($graph['edges'])->toContainEqual(['from' => 'plan:fan', 'to' => 'plan:y', 'kind' => 'branch'])
+        // a rollup node behaves like a worker: an edge to its next
+        ->and($graph['edges'])->toContainEqual(['from' => 'plan:roll', 'to' => 'plan:done', 'kind' => 'sequence'])
+        // parallel had no next, so no join edges were synthesised
+        ->and(collect($graph['edges'])->where('kind', 'join')->all())->toBe([]);
 });
 
 // --- RunGraph::fromDurable: DurableRunDetail → the DAG ---------------------

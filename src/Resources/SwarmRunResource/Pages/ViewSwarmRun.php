@@ -90,15 +90,17 @@ final class ViewSwarmRun extends ViewRecord
      * inspection is unbound or fails, fall back to the topology-derived flow over
      * run history ({@see RunGraph::fromRun()}).
      *
+     * Takes the {@see InspectsDurableRuns} contract as an argument (rather than
+     * resolving it from the container) so the plan-vs-history selection is testable
+     * directly, below the Livewire render layer — mirroring {@see resolveDisplay()}.
+     *
      * @param  array<string, mixed>  $data  the display record
      * @param  array<int, array<string, mixed>>  $facets
      * @return array{nodes: list<array<string, mixed>>, edges: list<array<string, mixed>>}
      */
-    private static function resolveFlow(string $runId, array $data, array $facets): array
+    public static function resolveFlow(InspectsDurableRuns $durable, string $runId, array $data, array $facets): array
     {
         try {
-            $durable = app(InspectsDurableRuns::class);
-
             if ($durable->find($runId) !== null) {
                 $run = $durable->inspect($runId)->run ?? [];
                 $plan = $run['route_plan'] ?? null;
@@ -127,7 +129,7 @@ final class ViewSwarmRun extends ViewRecord
         // retired global "Memory Snapshots" list becomes a facet of the run.
         $runId = (string) $this->getRecord()->getKey();
         $facets = MemoryFacets::forRun(app(SnapshotsMemory::class), $runId);
-        $graph = self::resolveFlow($runId, $data, $facets);
+        $graph = self::resolveFlow(app(InspectsDurableRuns::class), $runId, $data, $facets);
 
         // Streaming and audit are facets of THIS run, folded in as sections — not
         // separate destinations. Both degrade to nothing/an empty-state when the
