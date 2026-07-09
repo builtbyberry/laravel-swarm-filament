@@ -33,7 +33,7 @@ final class RunDisplayPresenter
 
     /**
      * @param  array<string, mixed>  $display  a `findForDisplay()` row
-     * @return array{run_id: ?string, swarm_class: ?string, topology: ?string, status: ?string, started_at: mixed, finished_at: mixed, context: string, output: string, steps: list<array{step_index: ?int, agent_class: ?string, role: ?string, decision: ?string, tokens: ?int, input: string, output: string}>, metrics: array{steps: int, tokens: ?int, duration: ?string}}
+     * @return array{run_id: ?string, swarm_class: ?string, topology: ?string, status: ?string, started_at: mixed, finished_at: mixed, context: string, output: string, steps: list<array{step_index: ?int, agent_class: ?string, role: ?string, decision: ?string, tokens: ?int, input: string, output: string}>, metrics: array{steps: int, tokens: ?int, duration: ?string}, error: array{message: ?string, class: ?string}|null, artifacts: list<array{name: string, content: string, step_agent_class: ?string}>, run_metadata: array{parent_run_id: ?string, execution_mode: ?string, tags: ?string}}
      */
     public static function present(array $display): array
     {
@@ -51,6 +51,105 @@ final class RunDisplayPresenter
             'steps' => $steps,
             // A run-level "so what" line: totals the flow can headline with.
             'metrics' => self::metrics($display, $steps),
+            // The captured terminal failure — the "why" behind a red status.
+            'error' => self::error($display),
+            // Run-produced artifacts, content routed through the sealed chokepoint.
+            'artifacts' => self::artifacts($display),
+            // Plain-text operational metadata (lineage, mode, tags) — never sealed.
+            'run_metadata' => self::runMetadata($display),
+        ];
+    }
+
+    /**
+     * The run-level failure detail, or null when the run did not capture one.
+     *
+     * The persisted `error` payload is `{message?: string, class: class-string}`;
+     * `message` is omitted entirely under a Skip capture policy (class only). The
+     * message is a captured string, so it is routed through {@see DisplayField} —
+     * a sealed `sw0:` leaf is masked, never rendered raw (defense in depth, even
+     * though the error column is not itself sealed). The class is a framework type
+     * name (never decrypted data) and renders as a plain scalar.
+     *
+     * @param  array<string, mixed>  $display
+     * @return array{message: ?string, class: ?string}|null
+     */
+    private static function error(array $display): ?array
+    {
+        $error = $display['error'] ?? null;
+
+        if (! is_array($error) || $error === []) {
+            return null;
+        }
+
+        $message = DisplayField::fromRow($error, 'message');
+
+        return [
+            'message' => $message->isAvailable() ? (string) $message->value : null,
+            'class' => self::scalar($error['class'] ?? null),
+        ];
+    }
+
+    /**
+     * The run's captured artifacts, mapped for the read-only Artifacts facet. Each
+     * artifact's `content` is a captured value routed through {@see DisplayField}
+     * (partial leaf-mask at any depth), so a sealed `sw0:` value never renders raw
+     * even though the artifacts column is not itself sealed. `name` and the
+     * producing `step_agent_class` are framework-set identifiers, rendered scalar.
+     *
+     * @param  array<string, mixed>  $display
+     * @return list<array{name: string, content: string, step_agent_class: ?string}>
+     */
+    private static function artifacts(array $display): array
+    {
+        $artifacts = $display['artifacts'] ?? null;
+
+        if (! is_array($artifacts)) {
+            return [];
+        }
+
+        $mapped = [];
+
+        foreach ($artifacts as $artifact) {
+            if (! is_array($artifact)) {
+                continue;
+            }
+
+            $mapped[] = [
+                'name' => self::scalar($artifact['name'] ?? null) ?? '(unnamed)',
+                'content' => self::render(DisplayField::fromRow($artifact, 'content')),
+                'step_agent_class' => self::scalar($artifact['step_agent_class'] ?? null),
+            ];
+        }
+
+        return $mapped;
+    }
+
+    /**
+     * The run's operational metadata surfaced in Run details: its lineage
+     * (`parent_run_id`), the `execution_mode`, and any `tags`. These are
+     * framework-set, plain-text index values — never sealed IO — so they render as
+     * scalars (tags list flattened to a comma-joined string). Absent keys degrade
+     * to null so the view can placeholder them.
+     *
+     * @param  array<string, mixed>  $display
+     * @return array{parent_run_id: ?string, execution_mode: ?string, tags: ?string}
+     */
+    private static function runMetadata(array $display): array
+    {
+        $metadata = is_array($display['metadata'] ?? null) ? $display['metadata'] : [];
+
+        $tags = $metadata['tags'] ?? null;
+        if (is_array($tags)) {
+            $tags = array_values(array_filter($tags, 'is_scalar'));
+            $tags = $tags === [] ? null : implode(', ', array_map(static fn (mixed $t): string => (string) $t, $tags));
+        } else {
+            $tags = self::scalar($tags);
+        }
+
+        return [
+            'parent_run_id' => self::scalar($metadata['parent_run_id'] ?? null),
+            'execution_mode' => self::scalar($metadata['execution_mode'] ?? null),
+            'tags' => $tags,
         ];
     }
 

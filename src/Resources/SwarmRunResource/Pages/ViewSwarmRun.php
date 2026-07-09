@@ -156,6 +156,18 @@ final class ViewSwarmRun extends ViewRecord
                 ]),
         ];
 
+        // A failed run must show its "why", not just a red status: the captured
+        // terminal failure (message + exception class), display-decrypted and
+        // degrade-safe. Shown whenever the run errored — an error payload is
+        // present, or the status is `failed` even if no detail was captured.
+        if (self::hasFailure($data)) {
+            array_splice($components, 1, 0, [
+                Section::make('Failure')
+                    ->description('Why this run ended in a failed state.')
+                    ->schema(self::failureSchema($data)),
+            ]);
+        }
+
         if ((int) ($stream['node_count'] ?? 0) > 0) {
             $components[] = Section::make('Streaming')
                 ->description('The per-node causal log of what streamed while this run executed.')
@@ -170,6 +182,19 @@ final class ViewSwarmRun extends ViewRecord
             ->collapsed()
             ->schema(self::auditSchema($audit));
 
+        // Run-produced artifacts as a read-only facet — no control actions. Always
+        // present (collapsed) with an empty-state, so the surface is discoverable
+        // even for runs that captured none. Content is degrade-safe (sealed leaves
+        // masked in RunDisplayPresenter before it reaches the partial).
+        $components[] = Section::make('Artifacts')
+            ->description('Read-only outputs this run captured.')
+            ->collapsed()
+            ->schema([
+                ViewEntry::make('artifacts')->hiddenLabel()->view('swarm-filament::artifacts')->state($data['artifacts']),
+            ]);
+
+        $metadata = $data['run_metadata'];
+
         $components[] = Section::make('Run details')
             ->collapsed()
             ->columns(2)
@@ -178,6 +203,11 @@ final class ViewSwarmRun extends ViewRecord
                 TextEntry::make('swarm_class')->label('Swarm')->state($data['swarm_class']),
                 TextEntry::make('started_at')->label('Started')->dateTime()->state($data['started_at']),
                 TextEntry::make('finished_at')->label('Finished')->dateTime()->placeholder('—')->state($data['finished_at']),
+                // Operational metadata: lineage, execution mode, and tags. Plain-text
+                // index values (never sealed IO), placeholdered when absent.
+                TextEntry::make('parent_run_id')->label('Parent run')->state($metadata['parent_run_id'])->fontFamily('mono')->placeholder('—'),
+                TextEntry::make('execution_mode')->label('Execution mode')->state($metadata['execution_mode'])->placeholder('—'),
+                TextEntry::make('tags')->label('Tags')->state($metadata['tags'])->placeholder('—'),
             ]);
 
         // The run reads as one story top-to-bottom — a single full-width column, not
@@ -201,6 +231,45 @@ final class ViewSwarmRun extends ViewRecord
                 ->hiddenLabel()
                 ->view('swarm-filament::audit-timeline')
                 ->state($audit),
+        ];
+    }
+
+    /**
+     * Whether the run should surface a Failure section: a captured `error`
+     * payload is present, or the run reached a `failed` status even if no failure
+     * detail was captured (Skip policy / an unstamped error).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private static function hasFailure(array $data): bool
+    {
+        return ($data['error'] ?? null) !== null || ($data['status'] ?? null) === 'failed';
+    }
+
+    /**
+     * The Failure section content: the captured exception class and message. Both
+     * come pre-degraded from {@see RunDisplayPresenter} — the message is routed
+     * through the sealed chokepoint there, so no `sw0:` ciphertext reaches here.
+     * When the run failed without a captured payload, the class placeholder still
+     * gives the "why is this red" answer rather than an empty section.
+     *
+     * @param  array<string, mixed>  $data
+     * @return list<Component>
+     */
+    private static function failureSchema(array $data): array
+    {
+        $error = is_array($data['error'] ?? null) ? $data['error'] : [];
+
+        return [
+            TextEntry::make('failure_class')
+                ->label('Exception')
+                ->state(is_string($error['class'] ?? null) ? $error['class'] : null)
+                ->fontFamily('mono')
+                ->placeholder('No failure detail was captured for this run.'),
+            TextEntry::make('failure_message')
+                ->label('Message')
+                ->state(is_string($error['message'] ?? null) ? $error['message'] : null)
+                ->placeholder('—'),
         ];
     }
 
