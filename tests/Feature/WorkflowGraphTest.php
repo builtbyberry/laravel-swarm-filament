@@ -330,3 +330,42 @@ test('WorkflowGraphPresenter preserves extra node fields through layout', functi
         ->and($g['nodes'][0]['detail_output'])->toBe('full')
         ->and($g['nodes'][0])->toHaveKeys(['x', 'y', 'w', 'h']);
 });
+
+// --- Node-id escaping in the Alpine SVG partial (finding #F19) -------------
+// A node id flows from run/plan data (agent- and tool-influenced) into Alpine
+// x-on / x-bind EXPRESSION attributes. Those attribute values are evaluated as
+// JavaScript, so HTML-escaping alone is not enough — a raw quote survives HTML
+// decoding and breaks out of the JS string. The partial must JS-encode ids
+// (Blade @js) so a crafted id cannot break the attribute or inject an expression.
+
+// Tested at the source + encoder level, not via a Blade render: the Livewire /
+// view-render harness is unreliable here (Filament v5 + Testbench), so we guard
+// the two things that make the fix correct — (1) every id site in the partial
+// goes through @js, and (2) @js actually neutralises a breakout payload.
+
+test('the graph partial JS-encodes every node/edge id in its Alpine expression attributes', function () {
+    $partial = file_get_contents(dirname(__DIR__, 2).'/resources/views/graph.blade.php');
+
+    // Ids must flow through @js (Blade's JS encoder), never a hand-rolled
+    // single-quoted interpolation that a crafted id could break out of.
+    expect($partial)
+        ->toContain('@js($node[\'id\'])')
+        ->toContain('@js($edge[\'from\'])')
+        ->toContain('@js($edge[\'to\'])')
+        // No node/edge field may be interpolated inside a single-quoted JS literal.
+        ->not->toContain('\'{{ $node')
+        ->not->toContain('\'{{ $edge');
+});
+
+test('Blade @js hex-escapes a crafted id so it cannot break out of the Alpine JS string', function () {
+    // The encoder @js expands to — proving the mechanism the partial now relies on.
+    // An id engineered to close the string and run an expression if left unescaped:
+    //   sel === 'evil'-alert(1)-'x'  →  string, then -alert(1)-, then string.
+    $encoded = \Illuminate\Support\Js::from("evil'-alert(1)-'x")->toHtml();
+
+    // Every apostrophe is hex-escaped ('), so it can never close the literal;
+    // the raw breakout form is therefore absent.
+    expect($encoded)
+        ->toBe('\'evil\\u0027-alert(1)-\\u0027x\'')
+        ->not->toContain("'evil'");
+});

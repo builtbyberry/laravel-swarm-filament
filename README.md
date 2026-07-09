@@ -57,8 +57,11 @@ use Illuminate\Support\Facades\Gate;
 Gate::define('viewSwarmObservability', fn ($user) => $user->is_admin);
 ```
 
-To hand authorization entirely to Filament's own panel / resource policies instead,
-set the ability to `null` (or `''`) — the package then defers rather than gating:
+To turn the package gate off entirely, set the ability to `null` (or `''`). Every
+surface then becomes visible to **any user who can reach the Filament panel** — these
+hooks _are_ the resource's authorization, so this grants access rather than deferring
+to a per-resource policy. Use it only when the panel itself is already suitably locked
+down:
 
 ```php
 'authorization' => ['ability' => null],

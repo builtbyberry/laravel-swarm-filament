@@ -27,7 +27,8 @@ Published to `config/swarm-filament.php` via
 - `navigation.sort` (int|null, default `null`) — optional sort order for the group.
 - `authorization.ability` (string|null, default `'viewSwarmObservability'`) — the
   Gate ability every surface authorizes against (deny-by-default). Set to `null`
-  (or `''`) to defer to Filament's own authorization instead.
+  (or `''`) to turn the gate off entirely, making every surface visible to any user
+  who can reach the Filament panel (a grant, not a hand-off to a per-resource policy).
 
 ## Authorization contract
 

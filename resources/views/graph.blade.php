@@ -40,17 +40,17 @@
                 @foreach ($graph['edges'] as $edge)
                     <path d="{{ $edge['d'] }}" fill="none" stroke="currentColor"
                           class="swarm-graph__edge"
-                          x-bind:stroke-opacity="sel && sel !== '{{ $edge['from'] }}' && sel !== '{{ $edge['to'] }}' ? 0.12 : 0.4"
+                          x-bind:stroke-opacity="sel && sel !== @js($edge['from']) && sel !== @js($edge['to']) ? 0.12 : 0.4"
                           marker-end="url(#swarm-arrow)" />
                 @endforeach
 
                 @foreach ($graph['nodes'] as $node)
                     @php($fill = $statusFill($node['status'] ?? null))
-                    <g class="swarm-graph__node" x-on:click="sel = (sel === '{{ $node['id'] }}' ? null : '{{ $node['id'] }}')"
-                       x-bind:opacity="sel && sel !== '{{ $node['id'] }}' ? 0.55 : 1">
+                    <g class="swarm-graph__node" x-on:click="sel = (sel === @js($node['id']) ? null : @js($node['id']))"
+                       x-bind:opacity="sel && sel !== @js($node['id']) ? 0.55 : 1">
                         <rect x="{{ $node['x'] }}" y="{{ $node['y'] }}" width="{{ $node['w'] }}" height="{{ $node['h'] }}"
                               rx="12" class="swarm-graph__box"
-                              x-bind:stroke="sel === '{{ $node['id'] }}' ? '{{ $fill }}' : null" />
+                              x-bind:stroke="sel === @js($node['id']) ? '{{ $fill }}' : null" />
                         <rect x="{{ $node['x'] }}" y="{{ $node['y'] }}" width="5" height="{{ $node['h'] }}" rx="2" fill="{{ $fill }}" />
                         <circle cx="{{ $node['x'] + $node['w'] - 18 }}" cy="{{ $node['y'] + 20 }}" r="4" fill="{{ $fill }}" />
                         <text x="{{ $node['x'] + 18 }}" y="{{ $node['y'] + 26 }}" class="swarm-graph__label">{{ \Illuminate\Support\Str::limit($node['label'], 24) }}</text>
