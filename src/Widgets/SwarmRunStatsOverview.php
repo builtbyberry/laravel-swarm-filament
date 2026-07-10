@@ -27,6 +27,10 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
  */
 final class SwarmRunStatsOverview extends StatsOverviewWidget
 {
+    // Render inline with the index page rather than deferring — the strip is the
+    // landing page's headline, so a lazy placeholder would flash empty on first paint.
+    protected static bool $isLazy = false;
+
     protected ?string $pollingInterval = null;
 
     public static function canView(): bool
