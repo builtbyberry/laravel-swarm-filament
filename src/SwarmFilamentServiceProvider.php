@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace BuiltByBerry\LaravelSwarmFilament;
 
+use BuiltByBerry\LaravelSwarmFilament\Support\RunSummaryMemo;
 use Filament\Support\Assets\Asset;
 use Filament\Support\Facades\FilamentAsset;
 use Filament\Support\Facades\FilamentIcon;
@@ -55,6 +56,16 @@ class SwarmFilamentServiceProvider extends PackageServiceProvider
         }
     }
 
+    public function packageRegistered(): void
+    {
+        // Request-scoped, NOT a singleton: the runs-index summary memo must be
+        // flushed at every request boundary. Laravel/Octane clears `scoped()`
+        // instances on `RequestReceived` via `forgetScopedInstances()`, so the
+        // memo never serves a value produced in an earlier request and never
+        // grows unbounded across a worker's life (audit F2).
+        $this->app->scoped(RunSummaryMemo::class);
+    }
+
     public function packageBooted(): void
     {
         FilamentAsset::register($this->getAssets(), $this->getAssetPackageName());
@@ -62,7 +73,7 @@ class SwarmFilamentServiceProvider extends PackageServiceProvider
         FilamentIcon::register($this->getIcons());
     }
 
-    protected function getAssetPackageName(): ?string
+    protected function getAssetPackageName(): string
     {
         return 'builtbyberry/laravel-swarm-filament';
     }
