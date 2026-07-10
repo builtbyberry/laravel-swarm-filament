@@ -44,6 +44,7 @@ Published to `config/swarm-filament.php` via
 ## Upstream dependency
 
 Reads persisted data only through laravel-swarm v0.19's public read contracts
-(`InspectsDurableRuns`, `ReadableRunHistoryStore`, `ReadableAuditOutbox`) and the
-app's optional `ReadableSwarmAuditSink`. This package never touches the `@internal`
+(`InspectsDurableRuns`, `ReadableRunHistoryStore`, `SnapshotsMemory`,
+`StreamEventStore`, `ReadableAuditOutbox`) and the app's optional
+`ReadableSwarmAuditSink`. This package never touches the `@internal`
 `SwarmPersistenceCipher` or any operational/strict read path.
