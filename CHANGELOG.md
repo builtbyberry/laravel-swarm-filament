@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.2.0 - 2026-07-13
+
+Compatibility release. Widens the `builtbyberry/laravel-swarm` requirement to
+`^0.19 || ^0.20` so the panel installs alongside Laravel Swarm v0.20 (which
+tracks `laravel/ai` ^0.9). No swarm read-surface changed — the panel continues
+to read exclusively through the public v0.19 inspection contracts
+(`InspectsDurableRuns`, `ReadableRunHistoryStore`, `SnapshotsMemory`,
+`StreamEventStore`, `ReadableAuditOutbox`), which are unchanged in v0.20. The
+full suite, PHPStan (level 8), and Pint all pass against Swarm v0.20.
+
+### Changed
+
+- **Support Laravel Swarm ^0.20.** `composer.json` now allows
+  `builtbyberry/laravel-swarm: ^0.19 || ^0.20`. No behavioral change; view-only,
+  deny-by-default authorization and per-row display-decryption are unchanged.
+
 ## v0.1.0 - 2026-07-09
 
 First release — a free, read-only [Filament](https://filamentphp.com) observability

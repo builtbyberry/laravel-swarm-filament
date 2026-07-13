@@ -18,7 +18,7 @@
     ],
     "require": {
         "php": "^8.5",
-        "builtbyberry/laravel-swarm": "^0.19",
+        "builtbyberry/laravel-swarm": "^0.19 || ^0.20",
         "filament/filament": "^5.0",
         "illuminate/contracts": "^13.0",
         "illuminate/support": "^13.0",
@@ -43,7 +43,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "0.1.x-dev"
+            "dev-main": "0.2.x-dev"
         },
         "laravel": {
             "providers": [
