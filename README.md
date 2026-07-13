@@ -8,7 +8,7 @@ Free, read-only [Filament](https://filamentphp.com) observability panel for [Lar
 
 - PHP 8.5+
 - Filament 5.x
-- `builtbyberry/laravel-swarm` ^0.19
+- `builtbyberry/laravel-swarm` ^0.19 || ^0.20
 
 ## Installation
 
