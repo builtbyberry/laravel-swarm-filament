@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.2.1 - 2026-07-19
+
+Compatibility release. Widens the `builtbyberry/laravel-swarm` requirement to
+`^0.19 || ^0.20 || ^0.21 || ^0.22` so the panel installs alongside current core
+releases. On v0.22 the previous `^0.19 || ^0.20` constraint made the package
+uninstallable, so `composer require builtbyberry/laravel-swarm-filament` failed
+outright for anyone on a current core.
+
+No panel code changed. The read surface is still exclusively the public
+inspection contracts (`InspectsDurableRuns`, `ReadableRunHistoryStore`,
+`SnapshotsMemory`, `StreamEventStore`, `ReadableAuditOutbox`,
+`ReadableSwarmAuditSink`, `SwarmOperator`), all verified present and unchanged
+in v0.22.0. Full suite passes against core v0.22.0 — 180 tests, 641 assertions.
+
 ## v0.2.0 - 2026-07-13
 
 Compatibility release. Widens the `builtbyberry/laravel-swarm` requirement to
