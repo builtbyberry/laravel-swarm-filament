@@ -6,6 +6,9 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   tests:
     name: PHP ${{ matrix.php }} - Laravel 13 - ${{ matrix.dependencies }}
@@ -24,6 +27,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -36,12 +41,28 @@ jobs:
         if: matrix.php == '8.4'
         shell: bash
         run: |
-          # Before core v0.25.0 reaches Packagist, prove this companion against
-          # the reviewed release branch. The override automatically disappears
-          # once the stable core version is available.
-          if ! composer show --all builtbyberry/laravel-swarm 0.25.0 --no-interaction > /dev/null 2>&1; then
+          metadata="$RUNNER_TEMP/laravel-swarm-p2.json"
+
+          if ! curl --fail --silent --show-error --retry 3 \
+            https://repo.packagist.org/p2/builtbyberry/laravel-swarm.json \
+            --output "$metadata"; then
+            echo '::error::Could not verify whether Laravel Swarm v0.25.0 is published.'
+            exit 1
+          fi
+
+          if ! jq -e '.packages["builtbyberry/laravel-swarm"] | type == "array"' "$metadata" > /dev/null; then
+            echo '::error::Packagist returned an unexpected Laravel Swarm metadata document.'
+            exit 1
+          fi
+
+          if jq -e 'any(.packages["builtbyberry/laravel-swarm"][]; .version_normalized == "0.25.0.0")' "$metadata" > /dev/null; then
+            echo 'Laravel Swarm v0.25.0 is published; using the stable repository.'
+          else
+            # Temporary pre-tag bridge. Removal is owned by
+            # https://github.com/builtbyberry/laravel-swarm/issues/493.
             composer config repositories.swarm-vcs vcs https://github.com/builtbyberry/laravel-swarm.git
-            composer require --no-update "builtbyberry/laravel-swarm:dev-release/v0.25.0 as 0.25.x-dev"
+            composer require --no-update "builtbyberry/laravel-swarm:dev-release/v0.25.0#97bf2267ca347ce3886c81c9d72d3e6ac05ddb89 as 0.25.x-dev"
+            echo 'SWARM_CORE_EXPECTED_REFERENCE=97bf2267ca347ce3886c81c9d72d3e6ac05ddb89' >> "$GITHUB_ENV"
           fi
 
       - name: Install dependencies
@@ -51,6 +72,17 @@ jobs:
       - name: Install lowest dependencies
         if: matrix.dependencies == 'lowest'
         run: composer update --prefer-lowest --prefer-stable --prefer-dist --no-interaction --no-progress
+
+      - name: Verify resolved core source
+        shell: bash
+        run: |
+          reference=$(jq -er '.packages[] | select(.name == "builtbyberry/laravel-swarm") | .source.reference' composer.lock)
+          echo "Resolved Laravel Swarm source reference: $reference"
+
+          if [[ -n "${SWARM_CORE_EXPECTED_REFERENCE:-}" && "$reference" != "$SWARM_CORE_EXPECTED_REFERENCE" ]]; then
+            echo "::error::Expected Laravel Swarm source reference $SWARM_CORE_EXPECTED_REFERENCE, resolved $reference."
+            exit 1
+          fi
 
       - name: Execute tests
         run: composer test
