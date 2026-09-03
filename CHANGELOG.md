@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.2 - 2026-09-03
+
+Compatibility release. Supports PHP `^8.4` and extends the verified Laravel
+Swarm range through `^0.25`, with CI covering PHP 8.4 and 8.5 against latest
+and lowest dependency sets. No panel behavior changed.
+
 ## v0.2.1 - 2026-07-19
 
 Compatibility release. Widens the `builtbyberry/laravel-swarm` requirement to

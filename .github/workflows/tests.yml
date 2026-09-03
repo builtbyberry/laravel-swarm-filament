@@ -8,17 +8,18 @@ on:
 
 jobs:
   tests:
-    name: PHP 8.5 - Laravel 13 - ${{ matrix.dependency-version }}
+    name: PHP ${{ matrix.php }} - Laravel 13 - ${{ matrix.dependencies }}
     runs-on: ubuntu-24.04
 
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - dependency-version: prefer-stable
-            composer-flags: '--prefer-stable'
-          - dependency-version: prefer-lowest
-            composer-flags: '--prefer-lowest --prefer-stable'
+        php:
+          - '8.4'
+          - '8.5'
+        dependencies:
+          - stable-latest
+          - lowest
 
     steps:
       - name: Checkout code
@@ -27,20 +28,37 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.5'
+          php-version: ${{ matrix.php }}
           tools: composer:v2
           ini-values: memory_limit=1G
 
+      - name: Bootstrap the pre-tag PHP 8.4 core candidate
+        if: matrix.php == '8.4'
+        shell: bash
+        run: |
+          # Before core v0.25.0 reaches Packagist, prove this companion against
+          # the reviewed release branch. The override automatically disappears
+          # once the stable core version is available.
+          if ! composer show --all builtbyberry/laravel-swarm 0.25.0 --no-interaction > /dev/null 2>&1; then
+            composer config repositories.swarm-vcs vcs https://github.com/builtbyberry/laravel-swarm.git
+            composer require --no-update "builtbyberry/laravel-swarm:dev-release/v0.25.0 as 0.25.x-dev"
+          fi
+
       - name: Install dependencies
-        run: composer update ${{ matrix.composer-flags }} --prefer-dist --no-interaction --no-progress
+        if: matrix.dependencies == 'stable-latest'
+        run: composer update --prefer-stable --prefer-dist --no-interaction --no-progress
+
+      - name: Install lowest dependencies
+        if: matrix.dependencies == 'lowest'
+        run: composer update --prefer-lowest --prefer-stable --prefer-dist --no-interaction --no-progress
 
       - name: Execute tests
         run: composer test
 
       - name: Execute static analysis
-        if: matrix.dependency-version == 'prefer-stable'
+        if: matrix.dependencies == 'stable-latest'
         run: composer analyse
 
       - name: Execute code style check
-        if: matrix.dependency-version == 'prefer-stable'
+        if: matrix.dependencies == 'stable-latest'
         run: composer lint
