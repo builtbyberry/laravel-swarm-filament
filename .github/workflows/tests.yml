@@ -37,34 +37,6 @@ jobs:
           tools: composer:v2
           ini-values: memory_limit=1G
 
-      - name: Bootstrap the pre-tag PHP 8.4 core candidate
-        if: matrix.php == '8.4'
-        shell: bash
-        run: |
-          metadata="$RUNNER_TEMP/laravel-swarm-p2.json"
-
-          if ! curl --fail --silent --show-error --retry 3 \
-            https://repo.packagist.org/p2/builtbyberry/laravel-swarm.json \
-            --output "$metadata"; then
-            echo '::error::Could not verify whether Laravel Swarm v0.25.0 is published.'
-            exit 1
-          fi
-
-          if ! jq -e '.packages["builtbyberry/laravel-swarm"] | type == "array"' "$metadata" > /dev/null; then
-            echo '::error::Packagist returned an unexpected Laravel Swarm metadata document.'
-            exit 1
-          fi
-
-          if jq -e 'any(.packages["builtbyberry/laravel-swarm"][]; .version_normalized == "0.25.0.0")' "$metadata" > /dev/null; then
-            echo 'Laravel Swarm v0.25.0 is published; using the stable repository.'
-          else
-            # Temporary pre-tag bridge. Removal is owned by
-            # https://github.com/builtbyberry/laravel-swarm/issues/493.
-            composer config repositories.swarm-vcs vcs https://github.com/builtbyberry/laravel-swarm.git
-            composer require --no-update "builtbyberry/laravel-swarm:dev-release/v0.25.0#97bf2267ca347ce3886c81c9d72d3e6ac05ddb89 as 0.25.x-dev"
-            echo 'SWARM_CORE_EXPECTED_REFERENCE=97bf2267ca347ce3886c81c9d72d3e6ac05ddb89' >> "$GITHUB_ENV"
-          fi
-
       - name: Install dependencies
         if: matrix.dependencies == 'stable-latest'
         run: composer update --prefer-stable --prefer-dist --no-interaction --no-progress
@@ -73,14 +45,15 @@ jobs:
         if: matrix.dependencies == 'lowest'
         run: composer update --prefer-lowest --prefer-stable --prefer-dist --no-interaction --no-progress
 
-      - name: Verify resolved core source
+      - name: Verify published PHP 8.4 core
+        if: matrix.php == '8.4'
         shell: bash
         run: |
-          reference=$(jq -er '.packages[] | select(.name == "builtbyberry/laravel-swarm") | .source.reference' composer.lock)
-          echo "Resolved Laravel Swarm source reference: $reference"
+          version=$(composer show --format=json builtbyberry/laravel-swarm | jq -er '.versions[0]')
+          echo "Resolved Laravel Swarm version: $version"
 
-          if [[ -n "${SWARM_CORE_EXPECTED_REFERENCE:-}" && "$reference" != "$SWARM_CORE_EXPECTED_REFERENCE" ]]; then
-            echo "::error::Expected Laravel Swarm source reference $SWARM_CORE_EXPECTED_REFERENCE, resolved $reference."
+          if [[ "$version" != "v0.25."* ]]; then
+            echo "::error::Expected a published Laravel Swarm v0.25 release on PHP 8.4, resolved $version."
             exit 1
           fi
 
