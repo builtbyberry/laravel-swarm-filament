@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Admit core `^0.26` while retaining every `^0.19`–`^0.25` range and all other dependency constraints.
+- Preserve lowest coverage and test published core v0.25.0 plus pinned v0.26 candidate minimum/current official AI lanes on PHP 8.4 and 8.5. Verify locked and installed dependency versions, official sources, archives and immutable references, including Filament 5 and its actual Livewire requirements.
+- Add focused proof of public core history reads and persisted stream presentation, including candidate denied/failed tool-result payloads, read-only inspection and ciphertext masking.
+
+Candidate metadata is temporary CI input, not a published core release or proof
+of Packagist-only ecosystem installation. No panel behavior changes.
+
 ## v0.2.2 - 2026-09-03
 
 Compatibility release. Supports PHP `^8.4` and extends the verified Laravel

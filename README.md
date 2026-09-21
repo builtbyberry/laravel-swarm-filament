@@ -8,7 +8,15 @@ Free, read-only [Filament](https://filamentphp.com) observability panel for [Lar
 
 - PHP 8.4+
 - Filament 5.x
-- `builtbyberry/laravel-swarm` ^0.19 through ^0.25
+- `builtbyberry/laravel-swarm` ^0.19 through ^0.26
+
+The unreleased `^0.26` compatibility work is tested against pinned core candidate
+`e25842cab4291837dcce2ff6f4815e58feab9079`, with official Laravel AI v0.11.2
+and current stable `^0.11.2`. CI retains lowest dependencies and a published core
+v0.25.0 lane on PHP 8.4 and 8.5, with Filament 5 and its resolved Livewire 4
+requirements. Candidate metadata exists only during CI; these checks do not prove
+published installability. That requires published packages and a separate fresh
+Packagist-only ecosystem installation.
 
 ## Installation
 
