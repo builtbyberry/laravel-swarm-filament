@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.2.3 - 2026-09-21
 
 - Admit core `^0.26` while retaining every `^0.19`–`^0.25` range and all other dependency constraints.
 - Preserve lowest coverage and test published core v0.25.0 plus pinned v0.26 candidate minimum/current official AI lanes on PHP 8.4 and 8.5. Verify locked and installed dependency versions, official sources, archives and immutable references, including Filament 5 and its actual Livewire requirements.
