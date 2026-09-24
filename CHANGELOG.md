@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.3.0 - unreleased
+
+Compatibility with Laravel Swarm v0.27.0 and Laravel AI 1.0.
+
+### Added
+
+_To be filled in during release wrap-up._
+
+### Changed
+
+_To be filled in during release wrap-up._
+
 ## v0.2.3 - 2026-09-21
 
 - Admit core `^0.26` while retaining every `^0.19`–`^0.25` range and all other dependency constraints.
