@@ -10,16 +10,15 @@ Free, read-only [Filament](https://filamentphp.com) observability panel for [Lar
 - Filament 5.x
 - `builtbyberry/laravel-swarm` ^0.19 through ^0.27
 
-The unreleased `^0.27` compatibility work is tested against pinned core candidate
+The v0.3.0 `^0.27` compatibility work was tested against pinned core candidate
 `48ad4ef690363ca40ba7d3bd50e63e7fbe76ba4b`, with official Laravel AI v1.0.0
 (source `101c7ea33cd8569d82570f753fbf38e48b7d3d95`) and current stable `^1.0`.
 CI retains lowest dependencies, published core v0.25.0, and the prior core 0.26
 candidate `e25842cab4291837dcce2ff6f4815e58feab9079` with minimum/current official
 AI `^0.11.2`. All six profiles run on PHP 8.4 and 8.5, with Filament 5 and its
 resolved Livewire 4 requirements. Candidate metadata exists only in temporary
-compatibility manifests; these checks do not prove published installability.
-That requires published packages and a separate fresh Packagist-only ecosystem
-installation.
+compatibility manifests. Those lanes are historical prepublication evidence;
+fresh Packagist-only ecosystem installation remains a separate shipping gate.
 
 ### Token accounting
 
