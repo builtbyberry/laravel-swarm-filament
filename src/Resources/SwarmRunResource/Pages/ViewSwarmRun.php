@@ -380,7 +380,9 @@ final class ViewSwarmRun extends ViewRecord
             is_string($data['topology'] ?? null) ? $data['topology'] : null,
             ($metrics['steps'] ?? 0).' '.Str::plural('step', $metrics['steps'] ?? 0),
             isset($metrics['duration']) && is_string($metrics['duration']) ? $metrics['duration'] : null,
-            isset($metrics['tokens']) && is_int($metrics['tokens']) ? number_format($metrics['tokens']).' tokens' : null,
+            is_string($metrics['tokens_label'] ?? null)
+                ? $metrics['tokens_label'].' tokens'
+                : (is_int($metrics['tokens'] ?? null) ? number_format($metrics['tokens']).' tokens' : null),
         ]);
 
         return $swarm.' · '.implode(' · ', $parts);

@@ -6,11 +6,29 @@ Compatibility with Laravel Swarm v0.27.0 and Laravel AI 1.0.
 
 ### Added
 
-_To be filled in during release wrap-up._
+- Deterministic rendered assertions for the real Tokens column, detail Section,
+  recent Tokens Stat and all three workflow graph adapters, including malformed
+  reports, zero, mixed/unavailable accounting and structural nodes.
+- PHP 8.4/8.5 native AI minimum/current compatibility lanes using exact core
+  candidate `48ad4ef690363ca40ba7d3bd50e63e7fbe76ba4b`, while retaining the eight
+  older dependency lanes and strict lock/installed provenance controls.
 
 ### Changed
 
-_To be filled in during release wrap-up._
+- Admit core `^0.27` while retaining all `^0.19`–`^0.26` ranges.
+- Read native and legacy primary token pairs consistently across the four usage
+  displays. A known zero remains visible; incomplete or malformed usage is
+  unavailable. Recent totals require complete reports from one generation.
+  The all-null dual-pair sentinel displays as **Mixed or unavailable**; it does
+  not by itself prove mixed generations.
+- Choose conservative unavailable accounting over coercing missing/null values
+  to zero or combining unlike generations. This avoids presenting incomplete
+  throughput as a complete total. Tests exercise those rejected alternatives;
+  [UPGRADING.md](UPGRADING.md) describes the visible change. Stored rows,
+  public read-only access, authorization and sealed-value masking are preserved.
+
+Candidate dependency metadata is temporary test input, not a published release
+or Packagist-only installation proof.
 
 ## v0.2.3 - 2026-09-21
 

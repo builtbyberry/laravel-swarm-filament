@@ -62,8 +62,8 @@
                         @if (!empty($node['summary']))
                             <text x="{{ $node['x'] + 18 }}" y="{{ $node['y'] + 70 }}" class="swarm-graph__summary">{{ \Illuminate\Support\Str::limit($node['summary'], 32) }}</text>
                         @endif
-                        @if (!empty($node['tokens']))
-                            <text x="{{ $node['x'] + 18 }}" y="{{ $node['y'] + 92 }}" class="swarm-graph__meta">{{ number_format($node['tokens']) }} tokens</text>
+                        @if (is_string($node['tokens_label'] ?? null))
+                            <text x="{{ $node['x'] + 18 }}" y="{{ $node['y'] + 92 }}" class="swarm-graph__meta">{{ $node['tokens_label'] }} tokens</text>
                         @endif
                     </g>
                 @endforeach

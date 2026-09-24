@@ -56,7 +56,7 @@ it('aggregates volume, attention, recent latency and tokens from plaintext colum
     expect($stats['total'])->toBe(5)
         ->and($stats['needs_attention'])->toBe(2)      // dead_letter + failed
         ->and($stats['window'])->toBe(5)
-        ->and($stats['tokens'])->toBe(320)             // 100 + 200 + 0 + 10 + 10
+        ->and($stats['tokens'])->toBeNull()             // a real empty report makes the full total unknown
         ->and($stats['p50_latency'])->toBe('20s');     // sorted [5,10,20,30] → median idx 2
 });
 
@@ -75,7 +75,7 @@ it('returns null latency when nothing has finished, and zeros on an empty table'
 
     expect($stats['total'])->toBe(1)
         ->and($stats['p50_latency'])->toBeNull()       // no finished run in the window
-        ->and($stats['tokens'])->toBe(7);
+        ->and($stats['tokens'])->toBeNull();
 });
 
 it('never counts a sealed column — attention tracks only the failure family', function () {
