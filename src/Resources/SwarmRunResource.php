@@ -10,6 +10,7 @@ use BuiltByBerry\LaravelSwarmFilament\Models\SwarmRun;
 use BuiltByBerry\LaravelSwarmFilament\Resources\SwarmRunResource\Pages;
 use BuiltByBerry\LaravelSwarmFilament\Support\RunDisplayPresenter;
 use BuiltByBerry\LaravelSwarmFilament\Support\RunSummaryMemo;
+use BuiltByBerry\LaravelSwarmFilament\Support\UsagePresentation;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Tables\Columns\TextColumn;
@@ -150,17 +151,10 @@ final class SwarmRunResource extends SwarmResource
         return $seconds > 0 ? $seconds.'s' : '—';
     }
 
-    /**
-     * Total prompt+completion tokens for a run from the plaintext usage summary,
-     * or an em dash when there were none (e.g. a scripted, non-LLM run).
-     */
+    /** Complete primary token count, or an explicit unavailable label. */
     public static function tokensLabel(SwarmRun $record): string
     {
-        $usage = $record->usage;
-        $tokens = (is_numeric($usage['prompt_tokens'] ?? null) ? (int) $usage['prompt_tokens'] : 0)
-            + (is_numeric($usage['completion_tokens'] ?? null) ? (int) $usage['completion_tokens'] : 0);
-
-        return $tokens > 0 ? number_format($tokens) : '—';
+        return UsagePresentation::report($record->usage)['label'];
     }
 
     /**

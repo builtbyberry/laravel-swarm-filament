@@ -25,6 +25,8 @@ jobs:
           - published-0.25
           - adoption-minimum
           - adoption-current
+          - native1-minimum
+          - native1-current
 
     steps:
       - name: Checkout code
@@ -48,20 +50,24 @@ jobs:
 
       # This manifest and archive are pinned candidate inputs, not a published tag.
       - name: Prepare pinned core candidate
-        if: startsWith(matrix.dependencies, 'adoption-')
+        if: startsWith(matrix.dependencies, 'adoption-') || startsWith(matrix.dependencies, 'native1-')
         shell: bash
         run: |
+          core_ref=e25842cab4291837dcce2ff6f4815e58feab9079
+          if [[ '${{ matrix.dependencies }}' == native1-* ]]; then
+            core_ref=48ad4ef690363ca40ba7d3bd50e63e7fbe76ba4b
+          fi
           curl --fail --silent --show-error --location \
-            https://raw.githubusercontent.com/builtbyberry/laravel-swarm/e25842cab4291837dcce2ff6f4815e58feab9079/composer.json \
+            "https://raw.githubusercontent.com/builtbyberry/laravel-swarm/$core_ref/composer.json" \
             --output "$RUNNER_TEMP/core-candidate.json"
           php .github/scripts/compatibility.php prepare '${{ matrix.dependencies }}' "$RUNNER_TEMP/core-candidate.json"
 
       - name: Install current stable dependencies
-        if: matrix.dependencies == 'published-0.25' || matrix.dependencies == 'adoption-current'
+        if: matrix.dependencies == 'published-0.25' || matrix.dependencies == 'adoption-current' || matrix.dependencies == 'native1-current'
         run: composer update --prefer-stable --prefer-dist --no-interaction --no-progress
 
       - name: Install lowest dependencies
-        if: matrix.dependencies == 'lowest' || matrix.dependencies == 'adoption-minimum'
+        if: matrix.dependencies == 'lowest' || matrix.dependencies == 'adoption-minimum' || matrix.dependencies == 'native1-minimum'
         run: composer update --prefer-lowest --prefer-stable --prefer-dist --no-interaction --no-progress
 
       - name: Test dependency evidence guards
@@ -74,11 +80,11 @@ jobs:
         run: composer test
 
       - name: Execute static analysis
-        if: matrix.dependencies == 'published-0.25' || matrix.dependencies == 'adoption-current'
+        if: matrix.dependencies == 'published-0.25' || matrix.dependencies == 'adoption-current' || matrix.dependencies == 'native1-current'
         run: |
           vendor/bin/phpstan clear-result-cache
           composer analyse
 
       - name: Execute code style check
-        if: matrix.dependencies == 'published-0.25' || matrix.dependencies == 'adoption-current'
+        if: matrix.dependencies == 'published-0.25' || matrix.dependencies == 'adoption-current' || matrix.dependencies == 'native1-current'
         run: composer lint

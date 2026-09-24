@@ -8,7 +8,7 @@ use Illuminate\Support\Carbon;
 
 /*
  * The runs-list column formatters. durationLabel/tokensLabel own boundary logic
- * (unfinished / sub-second / zero → em dash), and gist is a redaction-sensitive
+ * (unfinished / sub-second → em dash; known zero → 0), and gist is a redaction-sensitive
  * path rendered per row — it must filter the display sentinels and never surface
  * redacted or undecryptable text into a list cell.
  */
@@ -29,18 +29,18 @@ test('durationLabel formats whole seconds and dashes the unfinished or sub-secon
     expect(SwarmRunResource::durationLabel($unfinished))->toBe('—');
 });
 
-test('tokensLabel sums usage and dashes a scripted (zero-token) run', function () {
+test('tokensLabel sums complete usage and distinguishes zero from unavailable', function () {
     $llm = new SwarmRun;
     $llm->usage = ['prompt_tokens' => 120, 'completion_tokens' => 80];
     expect(SwarmRunResource::tokensLabel($llm))->toBe('200');
 
     $scripted = new SwarmRun;
     $scripted->usage = ['prompt_tokens' => 0, 'completion_tokens' => 0];
-    expect(SwarmRunResource::tokensLabel($scripted))->toBe('—');
+    expect(SwarmRunResource::tokensLabel($scripted))->toBe('0');
 
     $none = new SwarmRun;
     $none->usage = [];
-    expect(SwarmRunResource::tokensLabel($none))->toBe('—');
+    expect(SwarmRunResource::tokensLabel($none))->toBe('Unavailable');
 });
 
 test('gist filters the display sentinels and clips, never leaking redacted text', function () {

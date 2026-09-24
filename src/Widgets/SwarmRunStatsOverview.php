@@ -57,7 +57,7 @@ final class SwarmRunStatsOverview extends StatsOverviewWidget
             Stat::make('p50 latency', $stats['p50_latency'] ?? '—')
                 ->description($recent)
                 ->color('gray'),
-            Stat::make('Tokens', number_format($stats['tokens']))
+            Stat::make('Tokens', $stats['tokens_label'])
                 ->description($recent)
                 ->color('gray'),
         ];

@@ -351,7 +351,7 @@ test('a bare durable node output is sealed-rendered onto its chained node', func
 });
 
 test('every builder emits the same detail SHAPE so the click-through is uniform', function () {
-    $keys = ['summary', 'tokens', 'detail_input', 'detail_output', 'detail_duration', 'detail_attempts', 'detail_wrote', 'detail_memory', 'detail_tools'];
+    $keys = ['summary', 'tokens', 'tokens_label', 'detail_input', 'detail_output', 'detail_duration', 'detail_attempts', 'detail_wrote', 'detail_memory', 'detail_tools'];
 
     $run = RunGraph::fromRun(['status' => 'completed', 'steps' => [['step_index' => 0, 'agent_class' => 'X', 'output' => 'y']]]);
     $plan = RunGraph::fromRoutePlan(['nodes' => ['a' => ['type' => 'worker', 'agent' => 'App\\A']]]);
@@ -465,14 +465,14 @@ test('the presenter extracts per-step role, decision, and tokens from metadata',
         ->and($presented['metrics']['duration'])->toBe('3s');
 });
 
-test('scripted runs report no tokens or duration (metrics stay null, not zero noise)', function () {
+test('known zero token usage stays visible while zero duration remains absent', function () {
     $presented = RunDisplayPresenter::present([
         'status' => 'completed', 'started_at' => '2026-07-08 21:25:00', 'finished_at' => '2026-07-08 21:25:00',
         'usage' => ['prompt_tokens' => 0, 'completion_tokens' => 0],
         'steps' => [['step_index' => 0, 'agent_class' => 'X', 'output' => 'y', 'output_available' => true, 'metadata' => []]],
     ]);
 
-    expect($presented['metrics']['tokens'])->toBeNull()
+    expect($presented['metrics']['tokens'])->toBe(0)
         ->and($presented['metrics']['duration'])->toBeNull();
 });
 

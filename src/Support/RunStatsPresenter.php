@@ -23,8 +23,7 @@ use BuiltByBerry\LaravelSwarmFilament\Models\SwarmRun;
  * cannot be derived without a model→price mapping (a future config surface), so
  * tokens are shown rather than an invented cost.
  *
- * Container-free and DB-backed, so it is verified directly with seeded rows
- * (real-contract data-path) rather than through a widget/page render.
+ * Reads database rows without resolving sealed display fields.
  */
 final class RunStatsPresenter
 {
@@ -41,7 +40,7 @@ final class RunStatsPresenter
     public const RECENT = 250;
 
     /**
-     * @return array{total: int, needs_attention: int, p50_latency: ?string, tokens: int, window: int}
+     * @return array{total: int, needs_attention: int, p50_latency: ?string, tokens: ?int, tokens_label: string, window: int}
      */
     public static function present(): array
     {
@@ -55,12 +54,10 @@ final class RunStatsPresenter
             ->get();
 
         // Single pass: sum token throughput and collect finished-run durations.
-        $tokens = 0;
+        $reports = [];
         $durations = [];
         foreach ($recent as $run) {
-            $usage = is_array($run->usage) ? $run->usage : [];
-            $tokens += (is_numeric($usage['prompt_tokens'] ?? null) ? (int) $usage['prompt_tokens'] : 0)
-                + (is_numeric($usage['completion_tokens'] ?? null) ? (int) $usage['completion_tokens'] : 0);
+            $reports[] = $run->usage;
 
             $start = $run->created_at;
             $end = $run->finished_at;
@@ -72,6 +69,7 @@ final class RunStatsPresenter
             }
         }
         sort($durations);
+        $usage = UsagePresentation::window($reports);
 
         return [
             'total' => $total,
@@ -79,7 +77,8 @@ final class RunStatsPresenter
             'p50_latency' => $durations === []
                 ? null
                 : self::humanizeDuration($durations[intdiv(count($durations), 2)]),
-            'tokens' => $tokens,
+            'tokens' => $usage['tokens'],
+            'tokens_label' => $usage['label'],
             'window' => min(self::RECENT, $recent->count()),
         ];
     }

@@ -33,7 +33,7 @@ final class RunDisplayPresenter
 
     /**
      * @param  array<string, mixed>  $display  a `findForDisplay()` row
-     * @return array{run_id: ?string, swarm_class: ?string, topology: ?string, status: ?string, started_at: mixed, finished_at: mixed, context: string, output: string, steps: list<array{step_index: ?int, agent_class: ?string, role: ?string, decision: ?string, tokens: ?int, input: string, output: string}>, metrics: array{steps: int, tokens: ?int, duration: ?string}, error: array{message: ?string, class: ?string}|null, artifacts: list<array{name: string, content: string, step_agent_class: ?string}>, run_metadata: array{parent_run_id: ?string, execution_mode: ?string, tags: ?string}}
+     * @return array{run_id: ?string, swarm_class: ?string, topology: ?string, status: ?string, started_at: mixed, finished_at: mixed, context: string, output: string, steps: list<array{step_index: ?int, agent_class: ?string, role: ?string, decision: ?string, tokens: ?int, tokens_label: string, input: string, output: string}>, metrics: array{steps: int, tokens: ?int, tokens_label: string, duration: ?string}, error: array{message: ?string, class: ?string}|null, artifacts: list<array{name: string, content: string, step_agent_class: ?string}>, run_metadata: array{parent_run_id: ?string, execution_mode: ?string, tags: ?string}}
      */
     public static function present(array $display): array
     {
@@ -155,33 +155,22 @@ final class RunDisplayPresenter
 
     /**
      * Run headline metrics — the plain-language summary the flow leads with.
-     * `tokens` and `duration` are null when there's nothing to report (e.g. a
-     * scripted run with no LLM usage), so the flow shows them only when real.
+     * Unknown usage retains an explicit label; an integer zero remains visible.
      *
      * @param  array<string, mixed>  $display
      * @param  list<array<string, mixed>>  $steps
-     * @return array{steps: int, tokens: ?int, duration: ?string}
+     * @return array{steps: int, tokens: ?int, tokens_label: string, duration: ?string}
      */
     private static function metrics(array $display, array $steps): array
     {
-        $tokens = self::tokens(is_array($display['usage'] ?? null) ? $display['usage'] : []);
+        $usage = UsagePresentation::report($display['usage'] ?? null);
 
         return [
             'steps' => count($steps),
-            'tokens' => $tokens > 0 ? $tokens : null,
+            'tokens' => $usage['tokens'],
+            'tokens_label' => $usage['label'],
             'duration' => self::duration($display['started_at'] ?? null, $display['finished_at'] ?? null),
         ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $usage
-     */
-    private static function tokens(array $usage): int
-    {
-        $prompt = is_numeric($usage['prompt_tokens'] ?? null) ? (int) $usage['prompt_tokens'] : 0;
-        $completion = is_numeric($usage['completion_tokens'] ?? null) ? (int) $usage['completion_tokens'] : 0;
-
-        return $prompt + $completion;
     }
 
     private static function duration(mixed $start, mixed $end): ?string
@@ -220,7 +209,7 @@ final class RunDisplayPresenter
     }
 
     /**
-     * @return list<array{step_index: ?int, agent_class: ?string, role: ?string, decision: ?string, tokens: ?int, input: string, output: string}>
+     * @return list<array{step_index: ?int, agent_class: ?string, role: ?string, decision: ?string, tokens: ?int, tokens_label: string, input: string, output: string}>
      */
     private static function steps(mixed $steps): array
     {
@@ -236,7 +225,7 @@ final class RunDisplayPresenter
             }
 
             $meta = is_array($step['metadata'] ?? null) ? $step['metadata'] : [];
-            $stepTokens = self::tokens(is_array($meta['usage'] ?? null) ? $meta['usage'] : []);
+            $usage = UsagePresentation::report($meta['usage'] ?? null);
 
             $mapped[] = [
                 'step_index' => is_int($step['step_index'] ?? null) ? $step['step_index'] : null,
@@ -245,7 +234,8 @@ final class RunDisplayPresenter
                 // the routing decision (e.g. the category the coordinator picked).
                 'role' => self::scalar($meta['node_role'] ?? null),
                 'decision' => self::scalar($meta['category'] ?? null),
-                'tokens' => $stepTokens > 0 ? $stepTokens : null,
+                'tokens' => $usage['tokens'],
+                'tokens_label' => $usage['label'],
                 'input' => self::sealed($step, 'input'),
                 'output' => self::sealed($step, 'output'),
             ];
