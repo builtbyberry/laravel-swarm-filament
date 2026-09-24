@@ -27,10 +27,10 @@ function headlineOf(array $data): string
 
 // --- Headline metrics: token totals ---------------------------------------
 
-test('headline metrics sum prompt- and completion-only usage and ignore non-numeric tokens', function () {
-    expect(RunDisplayPresenter::present(['usage' => ['prompt_tokens' => 30]])['metrics']['tokens'])->toBe(30)
-        ->and(RunDisplayPresenter::present(['usage' => ['completion_tokens' => 20]])['metrics']['tokens'])->toBe(20)
-        ->and(RunDisplayPresenter::present(['usage' => ['prompt_tokens' => 'abc', 'completion_tokens' => 5]])['metrics']['tokens'])->toBe(5);
+test('headline metrics refuse incomplete and malformed token totals', function () {
+    expect(RunDisplayPresenter::present(['usage' => ['prompt_tokens' => 30]])['metrics']['tokens'])->toBeNull()
+        ->and(RunDisplayPresenter::present(['usage' => ['completion_tokens' => 20]])['metrics']['tokens'])->toBeNull()
+        ->and(RunDisplayPresenter::present(['usage' => ['prompt_tokens' => 'abc', 'completion_tokens' => 5]])['metrics']['tokens'])->toBeNull();
 });
 
 // --- Headline metrics: duration edge cases --------------------------------

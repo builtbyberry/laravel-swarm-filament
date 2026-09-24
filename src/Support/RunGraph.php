@@ -72,6 +72,7 @@ final class RunGraph
                 ...self::detail([
                     'summary' => self::summarize($output),
                     'tokens' => is_int($step['tokens'] ?? null) ? $step['tokens'] : null,
+                    'tokens_label' => self::str($step['tokens_label'] ?? null),
                     'detail_input' => self::str($step['input'] ?? null),
                     'detail_output' => $output,
                     'detail_wrote' => is_array($facet['wrote'] ?? null) ? array_values($facet['wrote']) : [],
@@ -190,6 +191,7 @@ final class RunGraph
         return array_merge([
             'summary' => null,
             'tokens' => null,
+            'tokens_label' => null,
             'detail_input' => null,
             'detail_output' => null,
             'detail_duration' => null,
@@ -222,9 +224,17 @@ final class RunGraph
         $facet = $stepIndex !== null && isset($facets[$stepIndex]) && is_array($facets[$stepIndex]) ? $facets[$stepIndex] : [];
         $attempts = is_int($branch['attempts'] ?? null) ? $branch['attempts'] : null;
 
+        $hasExecution = ! empty($branch['usage'])
+            || ($attempts !== null && $attempts > 0)
+            || ! empty($branch['started_at'])
+            || ! empty($branch['finished_at'])
+            || in_array($branch['status'] ?? null, ['completed', 'succeeded'], true);
+        $usage = $hasExecution ? UsagePresentation::report($branch['usage'] ?? null) : null;
+
         return self::detail([
             'summary' => self::summarize($output),
-            'tokens' => self::usageTokens(is_array($branch['usage'] ?? null) ? $branch['usage'] : []),
+            'tokens' => $usage['tokens'] ?? null,
+            'tokens_label' => $usage['label'] ?? null,
             'detail_input' => RunDisplayPresenter::renderField($branch, 'input'),
             'detail_output' => $output,
             'detail_duration' => is_int($branch['duration_ms'] ?? null) ? self::formatDuration($branch['duration_ms']) : null,
@@ -254,22 +264,6 @@ final class RunGraph
         }
 
         return $map;
-    }
-
-    /**
-     * Total prompt+completion tokens from a usage array, or null when there is
-     * nothing to report — mirrors {@see RunDisplayPresenter} so the flow shows
-     * tokens only when real.
-     *
-     * @param  array<string, mixed>  $usage
-     */
-    private static function usageTokens(array $usage): ?int
-    {
-        $prompt = is_numeric($usage['prompt_tokens'] ?? null) ? (int) $usage['prompt_tokens'] : 0;
-        $completion = is_numeric($usage['completion_tokens'] ?? null) ? (int) $usage['completion_tokens'] : 0;
-        $total = $prompt + $completion;
-
-        return $total > 0 ? $total : null;
     }
 
     /**
@@ -352,7 +346,7 @@ final class RunGraph
                 'status' => isset($completed[$nodeId]) ? 'completed' : $runStatus,
                 // The worker's real branch execution detail when it ran; otherwise
                 // the empty detail shape (structural nodes, or a node not yet run).
-                ...($detailByNode[$nodeId] ?? self::detail()),
+                ...(in_array($type, ['parallel', 'finish', 'wait'], true) ? self::detail() : ($detailByNode[$nodeId] ?? self::detail())),
             ];
 
             if ($type === 'parallel') {

@@ -8,15 +8,36 @@ Free, read-only [Filament](https://filamentphp.com) observability panel for [Lar
 
 - PHP 8.4+
 - Filament 5.x
-- `builtbyberry/laravel-swarm` ^0.19 through ^0.26
+- `builtbyberry/laravel-swarm` ^0.19 through ^0.27
 
-The unreleased `^0.26` compatibility work is tested against pinned core candidate
-`e25842cab4291837dcce2ff6f4815e58feab9079`, with official Laravel AI v0.11.2
-and current stable `^0.11.2`. CI retains lowest dependencies and a published core
-v0.25.0 lane on PHP 8.4 and 8.5, with Filament 5 and its resolved Livewire 4
-requirements. Candidate metadata exists only during CI; these checks do not prove
-published installability. That requires published packages and a separate fresh
-Packagist-only ecosystem installation.
+The unreleased `^0.27` compatibility work is tested against pinned core candidate
+`48ad4ef690363ca40ba7d3bd50e63e7fbe76ba4b`, with official Laravel AI v1.0.0
+(source `101c7ea33cd8569d82570f753fbf38e48b7d3d95`) and current stable `^1.0`.
+CI retains lowest dependencies, published core v0.25.0, and the prior core 0.26
+candidate `e25842cab4291837dcce2ff6f4815e58feab9079` with minimum/current official
+AI `^0.11.2`. All six profiles run on PHP 8.4 and 8.5, with Filament 5 and its
+resolved Livewire 4 requirements. Candidate metadata exists only in temporary
+compatibility manifests; these checks do not prove published installability.
+That requires published packages and a separate fresh Packagist-only ecosystem
+installation.
+
+### Token accounting
+
+The Runs Tokens column, detail headline, recent Tokens stat and workflow graph
+read both legacy `prompt_tokens` / `completion_tokens` and native
+`input_tokens` / `output_tokens`. A total requires both primary values to be
+nonnegative integers; known zero displays as `0`. Cache and reasoning subsets
+are not added again. Empty, missing, null or malformed accounting displays as
+`Unavailable`, never a fabricated zero or partial total.
+
+`Mixed or unavailable` means the stored aggregate cannot supply a complete
+single-generation total. This includes the all-null sentinel with both primary
+name pairs; that sentinel alone does not prove both generations occurred.
+The recent stat also uses this label when its window includes both legacy and
+native reports, and withholds totals if any contributing run is unknown. An
+empty history shows `0` over zero runs. Structural graph nodes and workers that
+have not executed have no invocation count. Historical rows are not rewritten;
+original per-step evidence remains intact. See [UPGRADING.md](UPGRADING.md).
 
 ## Installation
 
