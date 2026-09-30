@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.4.0 - unreleased
+
+Compatibility with Laravel Swarm v0.28.0 (native Laravel AI feature access).
+
+### Added
+
+- PHP 8.4/8.5 `native1-028` minimum/current compatibility lanes using the frozen v0.28 core candidate `6c3da95` with official Laravel AI 1.x, alongside the six retained dependency profiles (eight overall). Adds a discriminating control that rejects a v0.27 core on the v0.28 lane.
+
+### Changed
+
+- Admit core `^0.28` while retaining all `^0.19`–`^0.27` ranges. No runtime, schema, or usage-accounting change.
+
 ## v0.3.0 - 2026-09-24
 
 Compatibility with Laravel Swarm v0.27.0 and Laravel AI 1.0.

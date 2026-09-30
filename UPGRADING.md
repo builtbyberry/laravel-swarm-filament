@@ -1,5 +1,14 @@
 # Upgrading Laravel Swarm — Filament
 
+## v0.4.0
+
+Core `^0.28` is supported alongside every previously supported `^0.19` through
+`^0.27` range. Filament 5, PHP 8.4+ and Laravel 13 requirements remain. Core 0.28
+adds native Laravel AI feature access through Swarm workflows; follow core's own
+upgrade guide for application changes. This companion neither migrates native
+tables nor rewrites history, and makes no runtime, schema or usage-accounting
+change. No action is required.
+
 ## v0.3.0
 
 Core `^0.27` is supported alongside every previously supported `^0.19` through

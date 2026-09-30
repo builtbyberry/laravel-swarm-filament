@@ -32,12 +32,13 @@ $root = readJson($argv[1] ?? __DIR__.'/../../composer.json');
 $controls = 0;
 foreach (LANES as $lane) {
     $native = str_starts_with($lane, 'native1-');
+    $core028 = str_contains($lane, '-028');
     $adoption = str_starts_with($lane, 'adoption-') || $native;
     $candidate = ['name' => CORE, 'require' => ['laravel/ai' => $native ? '^1.0' : '^0.11.2']];
-    $candidateRef = $native ? NATIVE_CANDIDATE_REF : CANDIDATE_REF;
-    $minimum = in_array($lane, ['lowest', 'adoption-minimum', 'native1-minimum'], true);
+    $candidateRef = $core028 ? NATIVE_CANDIDATE_028_REF : ($native ? NATIVE_CANDIDATE_REF : CANDIDATE_REF);
+    $minimum = in_array($lane, ['lowest', 'adoption-minimum', 'native1-minimum', 'native1-028-minimum'], true);
     $set = packages([
-        package(CORE, $native ? '0.27.0' : ($adoption ? '0.26.0' : 'v0.25.0'), $adoption ? $candidateRef : PUBLISHED_REF),
+        package(CORE, $native ? ($core028 ? '0.28.0' : '0.27.0') : ($adoption ? '0.26.0' : 'v0.25.0'), $adoption ? $candidateRef : PUBLISHED_REF),
         package('laravel/ai', $native ? 'v1.0.0' : ($adoption ? 'v0.11.2' : 'v0.10.0'), $native ? NATIVE_AI_MINIMUM_REF : ($adoption ? AI_MINIMUM_REF : str_repeat('a', 40))),
         package('laravel/framework', 'v13.16.0', str_repeat('b', 40)),
         package('livewire/livewire', $minimum ? 'v4.0.0' : 'v4.1.0', str_repeat('c', 40)),
@@ -129,12 +130,18 @@ foreach (LANES as $lane) {
     rejects(fn () => verify($set, $differentInstalled, $lane), 'valid installed package differs from lock');
     $controls++;
     foreach ([CORE, 'laravel/ai'] as $name) {
-        if (($name === CORE && $lane === 'lowest') || ($name === 'laravel/ai' && ! in_array($lane, ['adoption-minimum', 'native1-minimum'], true))) {
+        if (($name === CORE && $lane === 'lowest') || ($name === 'laravel/ai' && ! in_array($lane, ['adoption-minimum', 'native1-minimum', 'native1-028-minimum'], true))) {
             continue;
         }
         $bad = $set;
         $bad[$name] = package($name, $set[$name]['version'], str_repeat('d', 40));
         rejects(fn () => verify($bad, $bad, $lane), 'wrong pinned commit in otherwise consistent evidence');
+        $controls++;
+    }
+    if ($core028) {
+        $bad = $set;
+        $bad[CORE] = package(CORE, '0.27.0', NATIVE_CANDIDATE_REF);
+        rejects(fn () => verify($bad, $bad, $lane), 'previous native core generation');
         $controls++;
     }
 }
