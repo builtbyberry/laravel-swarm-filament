@@ -14,7 +14,7 @@ The v0.3.0 `^0.27` compatibility work was tested against pinned core candidate
 `48ad4ef690363ca40ba7d3bd50e63e7fbe76ba4b`, with official Laravel AI v1.0.0
 (source `101c7ea33cd8569d82570f753fbf38e48b7d3d95`) and current stable `^1.0`.
 The v0.4.0 `^0.28` work adds the same minimum/current native-AI lanes against the
-frozen core v0.28.0 candidate `6c3da95fcb3bc89a2ec0096346bd6efb11366cda`
+frozen core v0.28.0 candidate `269f749102f8d4c525c12e5486c3f57893d78d6b`
 (release/v0.28.0); no runtime, schema or accounting change.
 CI retains lowest dependencies, published core v0.25.0, and the prior core 0.26
 candidate `e25842cab4291837dcce2ff6f4815e58feab9079` with minimum/current official
