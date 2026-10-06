@@ -9,7 +9,7 @@ use Composer\Semver\Semver;
 const CORE = 'builtbyberry/laravel-swarm';
 const CANDIDATE_REF = 'e25842cab4291837dcce2ff6f4815e58feab9079';
 const NATIVE_CANDIDATE_REF = '48ad4ef690363ca40ba7d3bd50e63e7fbe76ba4b';
-const NATIVE_CANDIDATE_028_REF = '6c3da95fcb3bc89a2ec0096346bd6efb11366cda';
+const NATIVE_CANDIDATE_028_REF = '269f749102f8d4c525c12e5486c3f57893d78d6b';
 const NATIVE_AI_MINIMUM_REF = '101c7ea33cd8569d82570f753fbf38e48b7d3d95';
 const PUBLISHED_REF = 'be7df78e8fde12362cfff9007cfe723d572a5e4f';
 const AI_MINIMUM_REF = 'ee2c5162838d440c4e2e629ea93c8c87e838eaed';
