@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.4.0 - unreleased
+## v0.4.0 - 2026-10-06
 
 Compatibility with Laravel Swarm v0.28.0 (native Laravel AI feature access).
 
